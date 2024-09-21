@@ -11,10 +11,6 @@ class SimulationDataset(Dataset):
 
         self.data_dir = data_dir
 
-        # The number of timesteps and ramp directions of the simulation
-        self.timesteps = []
-        self.ramp_directions = []
-
         # Explore the data and extract the files
         # Row index: temperature
         # Column index: ramp direction (0: down, 1: up)
@@ -51,13 +47,21 @@ class SimulationDataset(Dataset):
             return None, None
 
     def _explore_data_dir(self):
+
         self.data_mapping = []
+
+        # The number of timesteps and ramp directions of the simulation
+        self.timesteps = []
+        self.ramp_directions = []
+
         # Find the different temp and ramp directions used in the simulations
         for root, dirs, files in os.walk(self.data_dir):
             for dir_ in dirs:
                 timestep, ramp_direction = self._extract_info(dir_)
                 self.timesteps.append(timestep) if timestep not in self.timesteps else None
                 self.ramp_directions.append(ramp_direction) if ramp_direction not in self.ramp_directions else None
+
+        self.timesteps = sorted(self.timesteps, reverse=False)
 
         # For each timestep and ramp dir, put all simulations file paths in data mapping
         for timestep in self.timesteps:
@@ -128,7 +132,7 @@ class SimulationDataset(Dataset):
             file_idx = idx
         else:
             ramp_direction = 1  # up
-            file_idx = idx - ramp_up_length
+            file_idx = idx - ramp_down_length
 
         # Get the filepath
         filepath = self.data_mapping[temp_idx][ramp_direction][file_idx]
@@ -190,3 +194,25 @@ class SimulationDataset(Dataset):
             return mapping[type_][idx]
         except KeyError:
             raise KeyError(f"Idx {idx} does not exist for type {type_}")
+
+    def calculate_p_t(self, omega: int) -> np.array:
+        """Calculates probability distribution for sampling a length 
+        of simulations given window size omega.
+
+        Each entry in the distribution tells us how much of the samples corerspond to
+        simulations with length t given that we desire windows of size omega.
+
+        We can use this to sample t to acquire samples with equal dimensions.
+        """
+
+        # Lambda function to calculate number of simulations that have timestep t
+        number_of_items = lambda x:  self.cumulative_lengths[index + 1] - self.cumulative_lengths[index]
+
+        # Calculate number of simulations for each amount of timestep of simulations
+        p_t = []
+        for timestep in self.timesteps:
+            index = self._timesteps_to_data_mapping_index(timestep)
+            p_t.append((timestep // omega) * number_of_items(index))
+
+        # Normalize to acquire probability distribution  
+        return np.array(p_t) / sum(p_t)
