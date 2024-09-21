@@ -7,9 +7,10 @@ from torch.utils.data import Dataset
 
 class SimulationDataset(Dataset):
 
-    def __init__(self, data_dir: str):
+    def __init__(self, data_dir: str, omega: int):
 
         self.data_dir = data_dir
+        self.omega = omega # window size
 
         # Explore the data and extract the files
         # Row index: temperature
@@ -19,6 +20,8 @@ class SimulationDataset(Dataset):
 
         # Helper function used in __getitem__
         self.cumulative_lengths = self._calculate_cumulative_lengths()
+
+        self.p_t = self.calculate_p_t(omega)
 
     def _timesteps_to_data_mapping_index(self, timestep: int):
         assert timestep in self.timesteps, f"timestamp not in data"
@@ -119,13 +122,11 @@ class SimulationDataset(Dataset):
         return self.cumulative_lengths[-1]
 
     def __getitem__(self, idx):
-        # Find the temperature (row)
+        # Find the temperature (row) and file
         temp_idx = np.searchsorted(self.cumulative_lengths, idx, side='right') - 1
-        
-        # Adjust idx for the found temperature
         idx -= self.cumulative_lengths[temp_idx]
         
-        # Determine ramp direction and file index
+        # Find the ramp direction and file index corresponding to the desired idx
         ramp_down_length = len(self.data_mapping[temp_idx][0])
         if idx < ramp_down_length:
             ramp_direction = 0  # down
@@ -134,14 +135,29 @@ class SimulationDataset(Dataset):
             ramp_direction = 1  # up
             file_idx = idx - ramp_down_length
 
-        # Get the filepath
+        # Load the simulation
         filepath = self.data_mapping[temp_idx][ramp_direction][file_idx]
-
-        # fetch data
         data = np.load(filepath)
+        
+        # Extract a time slice
+        return self._get_time_slice(data["output"], data["forcing"])
 
-        # return X, Y data
-        return data["output"], data["forcing"]
+    def _get_time_slice(self, output, forcing):
+        # Randomly select a starting point
+        max_start = output.shape[0] - 2*self.omega
+        if max_start > 0:
+            t_start = np.random.randint(0, max_start)
+        else:
+            t_start = 0
+        
+        t_middle = t_start + self.omega
+        t_end = t_start + 2*self.omega
+        
+        X = torch.from_numpy(output[t_start:t_middle,:,:]).float()
+        F = torch.from_numpy(forcing[t_start:t_end,:,:]).float()
+        Y = torch.from_numpy(output[t_middle:t_end,:,:]).float()
+        
+        return X, F, Y
 
     def channel_name_to_index(self, type_: str, name: str) -> int:
         """ Given the type of the data and the name, 

@@ -3,52 +3,29 @@ from torch.utils.data import Sampler
 import numpy as np
 
 class TimeAdjustedSampler(Sampler):
-    def __init__(self, dataset, batch_size: int, omega: int):
+    def __init__(self, dataset, batch_size: int):
         self.dataset = dataset
         self.batch_size = batch_size
-        self.omega = omega
+        self.p_t = dataset.p_t
+        self.cumulative_lengths = dataset.cumulative_lengths
 
-        self.timesteps = dataset.timesteps
-        self.p_t = p_t = dataset.calculate_p_t(omega=omega)
-
-    def __iter__(self) -> [[np.array, np.array, np.array]]:
-        # Gather data untill batch size is reached
-        batches = []
-        while len(batches) < self.batch_size:
-
-            # sample a simulation length
-            sample = np.random.choice(len(self.p_t), p=self.p_t)
-            
-            # find idxs of simulation of length t
-            idx_start = self.dataset.cumulative_lengths[sample]
-            idx_end = self.dataset.cumulative_lengths[sample + 1]
-
-            # uniformly choose idx to sample and get its simulation
-            idx = np.random.randint(idx_start, idx_end)
-            output, forcing = self.dataset[idx]
-
-            # Get all time blocks from sampled simulation
-            t_start = 0
-            while len(batches) < self.batch_size:
-                t_middle = t_start + self.omega
-                t_end = t_start + 2*self.omega
-
-                # check if there is enough room for, if not, break loop
-                if t_end > output.shape[0]:
-                    break
-
-                # fetch X data
-                X = output[t_start:t_middle,:,:]
-                F = forcing[t_start:t_end,:,:]
-                Y = output[t_middle:t_end,:,:]
+    def __iter__(self):
+        num_batches = len(self)
+        for _ in range(num_batches):
+            batch_indices = []
+            while len(batch_indices) < self.batch_size:
+                # sample a simulation length
+                sample = np.random.choice(len(self.p_t), p=self.p_t)
                 
-                # append to batch
-                batches.append([X, F, Y])
-
-                # go to next batch
-                t_start += 2*self.omega
-
-        yield batches[:self.batch_size+1]
+                # find idxs of simulation of length t
+                idx_start = self.cumulative_lengths[sample]
+                idx_end = self.cumulative_lengths[sample + 1]
+                
+                # uniformly choose idx to sample
+                idx = np.random.randint(idx_start, idx_end)
+                batch_indices.append(idx)
+            
+            yield batch_indices
 
     def __len__(self):
-        return len(self.dataset) // batch_size
+        return len(self.dataset) // self.batch_size
