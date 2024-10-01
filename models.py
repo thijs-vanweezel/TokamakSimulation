@@ -1,6 +1,6 @@
 import os
 os.environ["KERAS_BACKEND"] = "torch"
-import keras, math, torch
+import keras, math
 
 def log_normal_diag(x, mu, log_var):
     log_p = -0.5 * keras.ops.log(2. * math.pi) - 0.5 * log_var - 0.5 * keras.ops.exp(-log_var) * (x - mu)**2.
