@@ -155,7 +155,7 @@ class SimulationDataset(Dataset):
         t_end = t_start + 2*self.omega
         
         X = torch.from_numpy(output[t_start:t_middle,:,:]).float()
-        F = torch.from_numpy(forcing[t_start:t_end,:,:]).float()
+        F = torch.from_numpy(forcing[t_middle:t_end,:,:]).float()
         Y = torch.from_numpy(output[t_middle:t_end,:,:]).float()
         
         return X, F, Y
