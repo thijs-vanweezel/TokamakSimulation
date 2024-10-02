@@ -22,13 +22,13 @@ class Forward(keras.Model):
         ])
         self.conv1x1_1 = keras.layers.Conv2D(32, (1, 1), padding="same")
         self.block1 = block(32)
-        self.pool1 = keras.layers.MaxPooling2D((2, 2))
+        self.pool1 = keras.layers.MaxPooling2D((1, 2))
         self.conv1x1_2 = keras.layers.Conv2D(64, (1, 1), padding="same")
         self.block2 = block(64)
-        self.pool2 = keras.layers.MaxPooling2D((2, 2))
+        self.pool2 = keras.layers.MaxPooling2D((1, 2))
         self.conv1x1_3 = keras.layers.Conv2D(128, (1, 1), padding="same")
         self.block3 = block(128)
-        self.pool3 = keras.layers.MaxPooling2D((2, 2))
+        self.pool3 = keras.layers.MaxPooling2D((1, 2))
         self.block4 = block(256)
 
     def call(self, x_t):
@@ -108,11 +108,11 @@ class Decoder(keras.Model):
             keras.layers.GroupNormalization(groups=-1),
             keras.layers.Activation(activation) 
         ])
-        self.conv1x1_1 = keras.layers.Conv2DTranspose(256, (1, 1), strides=(2, 2), padding="same")
+        self.conv1x1_1 = keras.layers.Conv2DTranspose(256, (1, 1), strides=(1, 2), padding="same")
         self.block1 = block(256)
-        self.conv1x1_2 = keras.layers.Conv2DTranspose(128, (1, 1), strides=(2, 2), padding="same")
+        self.conv1x1_2 = keras.layers.Conv2DTranspose(128, (1, 1), strides=(1, 2), padding="same")
         self.block2 = block(128)
-        self.conv1x1_3 = keras.layers.Conv2DTranspose(64, (1, 1), strides=(2, 2), padding="same")
+        self.conv1x1_3 = keras.layers.Conv2DTranspose(64, (1, 1), strides=(1, 2), padding="same")
         self.block3 = block(64)
         self.block4 = block(6, "linear", (1, 1))
 
