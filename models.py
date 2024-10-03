@@ -104,7 +104,7 @@ class Decoder(keras.Model):
             keras.layers.Dropout(.1),
             keras.layers.Conv2DTranspose(filters, (3, 3), padding="same"),
             keras.layers.Activation("silu"),
-            keras.layers.Conv2DTranspose(filters, (3, 3), strides=strides if strides else (2, 2), padding="same"),
+            keras.layers.Conv2DTranspose(filters, (3, 3), strides=strides if strides else (1, 2), padding="same"),
             keras.layers.GroupNormalization(groups=-1),
             keras.layers.Activation(activation) 
         ])
