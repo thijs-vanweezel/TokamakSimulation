@@ -20,6 +20,7 @@ class Forward(keras.Model):
             keras.layers.GroupNormalization(groups=-1),
             keras.layers.Activation("silu")    
         ])
+        self.scaler = keras.layers.Normalization()
         self.conv1x1_1 = keras.layers.Conv2D(32, (1, 1), padding="same")
         self.block1 = block(32)
         self.pool1 = keras.layers.MaxPooling2D((1, 2))
