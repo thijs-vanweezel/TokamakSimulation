@@ -33,6 +33,8 @@ class Forward(keras.Model):
         self.block4 = block(256)
 
     def call(self, x_t):
+        x_t = self.scaler(x_t)
+
         h_ = self.conv1x1_1(x_t)
         h = self.block1(x_t)
         h = keras.layers.add([h, h_]) # residual connection
