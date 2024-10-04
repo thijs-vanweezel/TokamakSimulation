@@ -8,7 +8,7 @@ def log_normal_diag(x, mu, log_var):
 
 class Forward(keras.Model):
     """
-    An eight-layer residual convolutional network with dilated convolutions. Decreases the spatial dimensions by a factor of 16.
+    An eight-layer residual convolutional network with dilated convolutions. Decreases the spatial dimensions by a factor of 8.
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
