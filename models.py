@@ -113,6 +113,7 @@ class Decoder(keras.Model):
         ])
         self.conv1x1_1 = keras.layers.Conv2DTranspose(256, (1, 1), strides=(1, 2), padding="same")
         self.block1 = block(256)
+        self.padding = keras.layers.ZeroPadding2D(((0, 0), (1, 0)))
         self.conv1x1_2 = keras.layers.Conv2DTranspose(128, (1, 1), strides=(1, 2), padding="same")
         self.block2 = block(128)
         self.conv1x1_3 = keras.layers.Conv2DTranspose(64, (1, 1), strides=(1, 2), padding="same")
@@ -126,6 +127,7 @@ class Decoder(keras.Model):
         x = self.block1(x)
         x = keras.layers.add([x, x_]) # residual connection
 
+        x = self.padding(x) # Required for exact shape matching
         x_ = self.conv1x1_2(x)
         x = self.block2(x)
         x = keras.layers.add([x, x_])
