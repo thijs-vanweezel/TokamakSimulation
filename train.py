@@ -8,7 +8,7 @@ def train_step(x_t, x_t_plus1, forward_t, forward_tplus1, prior, posterior, deco
     h_t = forward_t(x_t)
     h_tplus1 = forward_tplus1(x_t_plus1)
     z, mu, log_var = posterior(h_t, h_tplus1)
-    kl_loss = posterior.log_prob(z, mu, log_var) - prior.log_prob(h_t, z)
+    kl_loss = keras.ops.sum(posterior.log_prob(z, mu, log_var) - prior.log_prob(h_t, z), axis=(1,2,3)) # Sum reduction
     rec_loss = decoder.log_prob(x_t_plus1, decoder(z, h_t))
     loss = keras.ops.mean(-(rec_loss - kl_loss))
 
@@ -21,7 +21,7 @@ def train_step(x_t, x_t_plus1, forward_t, forward_tplus1, prior, posterior, deco
 
     # Backward pass
     loss.backward()
-    trainable_weights = forward_t.trainable_weights + forward_tplus1.trainable_weighst \
+    trainable_weights = forward_t.trainable_weights + forward_tplus1.trainable_weights \
           + prior.trainable_weights + posterior.trainable_weights + decoder.trainable_weights
     gradients = [t.value.grad for t in trainable_weights]
     with torch.no_grad():
