@@ -30,6 +30,8 @@ class FusionDataset(IterableDataset):
             self.std, self.mean = torch.std_mean(x)
         # Scale
         return (x - self.mean) / self.std
+    def unscale(self, x):
+        return x * self.std + self.mean
     def __iter__(self):
         while self.idx<len(self.filepaths):
             # If trajectory is empty or x_{t+1} is not available
