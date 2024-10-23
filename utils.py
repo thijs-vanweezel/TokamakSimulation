@@ -1,7 +1,48 @@
 import os
 os.environ["KERAS_BACKEND"] = "torch"
-import keras, json
+import keras, json, numpy as np, torch
 from matplotlib import pyplot as plt
+from torch.utils.data import DataLoader, IterableDataset
+
+class FusionDataset(IterableDataset):
+    """
+    A dataset that efficiently loads chunks of a trajectory (x_t and x_{t+1}), in order.
+    Args:
+    \t- `data_dir` (str): Directory containing npz files and optionally other directories.
+    \t- `device` (str): Torch device, either "cuda" or "cpu".
+    \t- `omega` (int): Size of trajectory chunks.
+    """
+    def __init__(self, data_dir:str="./data/preprocessed/", device:str=None, omega:int=20):
+        super().__init__()
+        self.filepaths = [os.path.join(root, file) for root, _, files in os.walk(data_dir) for file in files]
+        self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
+        self.trajectory = []
+        self.idx = 0
+        self.omega = omega
+    def reset(self):
+        self.trajectory = []
+    def __iter__(self):
+        while self.idx<len(self.filepaths):
+            # If trajectory is empty or x_{t+1} is not available
+            if len(self.trajectory)<=1:
+                # Load trajectory and forcing variables
+                x, f = np.load(self.filepaths[self.idx]).values()
+                x, f = torch.tensor(x, device=self.device), torch.tensor(f, device=self.device)
+                trajectory = torch.concat([x,f], dim=-1)
+                # Split by omega, and drop remainder (which is randomly either first or last chunk)
+                drop_last = bool(torch.randint(0, 2, (1,)).item())
+                split_sizes = (not drop_last)*[trajectory.size(0)%self.omega] \
+                    + [self.omega]*(trajectory.size(0)//self.omega) + drop_last*[trajectory.size(0)%self.omega]
+                trajectory = torch.split(trajectory, split_sizes)[0+(not drop_last):len(split_sizes)-drop_last]
+                # Save for quick access
+                self.trajectory = list(trajectory)
+                # Update file index
+                self.idx += 1
+            # Return x_t and x_{t+1} (without forcing) and remove the former
+            yield self.trajectory.pop(0), self.trajectory[0][..., :-2]
+        self.idx = 0
+
+fusion_dataset = DataLoader(FusionDataset(), batch_size=16)
 
 def plot_1d_statistic_over_time(data, statistic_idx, title):
     """
