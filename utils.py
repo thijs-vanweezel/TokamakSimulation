@@ -19,8 +19,17 @@ class FusionDataset(IterableDataset):
         self.trajectory = []
         self.idx = 0
         self.omega = omega
+        self.std = self.mean = None
     def reset(self):
+        # Make sure to start from the beginning of a random trajectory
         self.trajectory = []
+        self.idx = torch.randint(0, len(self.filepaths), (1,)).item()
+    def scale(self, x):
+        # Calculate parameters once
+        if self.std is None:
+            self.std, self.mean = torch.std_mean(x)
+        # Scale
+        return (x - self.mean) / self.std
     def __iter__(self):
         while self.idx<len(self.filepaths):
             # If trajectory is empty or x_{t+1} is not available
@@ -29,6 +38,8 @@ class FusionDataset(IterableDataset):
                 x, f = np.load(self.filepaths[self.idx]).values()
                 x, f = torch.tensor(x, device=self.device), torch.tensor(f, device=self.device)
                 trajectory = torch.concat([x,f], dim=-1)
+                # Scale
+                trajectory = self.scale(trajectory)
                 # Split by omega, and drop remainder (which is randomly either first or last chunk)
                 drop_last = bool(torch.randint(0, 2, (1,)).item())
                 split_sizes = (not drop_last)*[trajectory.size(0)%self.omega] \
