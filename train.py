@@ -40,10 +40,6 @@ def run(dataloader, forward_t, forward_tplus1, prior, posterior, decoder, optimi
     for i in tqdm(range(n_epochs)):
         # Loop over batches
         for j, (x_t, x_tplus1) in enumerate(dataloader, 1):
-            # Initialize scaler
-            if (i==0) and (j==1):
-                forward_t.layers[0].adapt(x_t)
-                forward_tplus1.layers[0].adapt(x_tplus1)
             # Train
             kl_loss, rec_loss = train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, optimizer)
             train_loss_history["kl_loss"][i] = train_loss_history["kl_loss"][i]*(1-1/j) + 1/j*kl_loss
