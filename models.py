@@ -117,9 +117,11 @@ class Decoder(keras.Model):
         self.block3 = block(64)
         self.block4 = block(6, "linear", (1, 1))
 
-    def call(self, z):
-        x_ = self.conv1x1_1(z)
-        x = self.block1(z)
+    def call(self, z, h_t):
+        x = keras.layers.concatenate([z, h_t])
+
+        x_ = self.conv1x1_1(x)
+        x = self.block1(x)
         x = keras.layers.add([x, x_]) # residual connection
 
         x = self.padding(x) # Required for exact shape matching
