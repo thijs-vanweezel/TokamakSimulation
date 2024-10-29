@@ -31,17 +31,19 @@ def train_step(x_t, x_t_plus1, forward_t, forward_tplus1, prior, posterior, deco
     with torch.no_grad():
         opt.apply_gradients(zip(gradients, trainable_weights))
 
+    # Return loss interpretably
     return keras.ops.mean(kl_nll).item(), keras.ops.mean(-rec_ll).item()
 
 def run(dataloader, forward_t, forward_tplus1, prior, posterior, decoder, optimizer, n_epochs=100):
     # Loop over epochs
-    train_loss_history = {"kl_loss": [], "rec_loss": []}
+    train_loss_history = {"kl_loss": [0]*n_epochs, "rec_loss": [0]*n_epochs}
     os.makedirs("./results/basic0", exist_ok=True)
     for i in tqdm(range(n_epochs)):
         # Loop over batches
         for j, (x_t, x_tplus1) in enumerate(dataloader, 1):
             # Train
             kl_loss, rec_loss = train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, optimizer)
+            # Just a fancy way to append the mean
             train_loss_history["kl_loss"][i] = train_loss_history["kl_loss"][i]*(1-1/j) + 1/j*kl_loss
             train_loss_history["rec_loss"][i] = train_loss_history["rec_loss"][i]*(1-1/j) + 1/j*rec_loss
         # Save models 
