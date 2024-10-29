@@ -2,11 +2,12 @@ import os
 os.environ["KERAS_BACKEND"] = "torch"
 import keras, json, numpy as np, torch
 from matplotlib import pyplot as plt
-from torch.utils.data import DataLoader, IterableDataset
+from torch.utils.data import IterableDataset
 
 class FusionDataset(IterableDataset):
     """
-    A dataset that efficiently loads chunks of a trajectory (x_t and x_{t+1}), in order.
+    A dataset that efficiently loads chunks of a trajectory (x_t and x_{t+1}), in order. 
+    The trajectories are trimmed to a random length for pushforward-training, and they are always shuffled.
     Args:
     \t- `data_dir` (str): Directory containing npz files and optionally other directories.
     \t- `device` (str): Torch device, either "cuda" or "cpu".
@@ -14,16 +15,30 @@ class FusionDataset(IterableDataset):
     """
     def __init__(self, data_dir:str="./data/preprocessed/", device:str=None, omega:int=20):
         super().__init__()
-        self.filepaths = [os.path.join(root, file) for root, _, files in os.walk(data_dir) for file in files]
+        self.get_filepaths = lambda: [os.path.join(root, file) for root, _, files in os.walk(data_dir) for file in files]
+        self.filepaths = self.get_filepaths()
         self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
-        self.trajectory = []
-        self.idx = 0
         self.omega = omega
         self.std = self.mean = None
+        self.reset()
     def reset(self):
-        # Make sure to start from the beginning of a random trajectory
-        self.trajectory = []
-        self.idx = torch.randint(0, len(self.filepaths), (1,)).item()
+        """
+        Start from the beginning of a random trajectory with random length.
+        """
+        # Load random trajectory and forcing variables
+        idx = torch.randint(0, len(self.filepaths), (1,)).item()
+        x, f = np.load(self.filepaths.pop(idx)).values()
+        x, f = torch.tensor(x, device=self.device), torch.tensor(f, device=self.device)
+        trajectory = torch.concat([x,f], dim=-1)
+        # Scale
+        trajectory = self.scale(trajectory)
+        # Trim to random lenth for push-forward training
+        length = torch.randint(low=2, high=trajectory.size(0)//self.omega+1, size=(1,)).item()*self.omega
+        start_idx = torch.randint(0, trajectory.size(0)-length+1, (1,)).item()
+        trajectory = trajectory[start_idx:start_idx+length]
+        # Save for quick access
+        self.trajectory = trajectory
+        self.i = 0
     def scale(self, x):
         # Calculate parameters once
         if self.std is None:
@@ -33,29 +48,16 @@ class FusionDataset(IterableDataset):
     def unscale(self, x):
         return x * self.std + self.mean
     def __iter__(self):
-        while self.idx<len(self.filepaths):
-            # If trajectory is empty or x_{t+1} is not available
-            if len(self.trajectory)<=1:
-                # Load trajectory and forcing variables
-                x, f = np.load(self.filepaths[self.idx]).values()
-                x, f = torch.tensor(x, device=self.device), torch.tensor(f, device=self.device)
-                trajectory = torch.concat([x,f], dim=-1)
-                # Scale
-                trajectory = self.scale(trajectory)
-                # Split by omega, and drop remainder (which is randomly either first or last chunk)
-                drop_last = bool(torch.randint(0, 2, (1,)).item())
-                split_sizes = (not drop_last)*[trajectory.size(0)%self.omega] \
-                    + [self.omega]*(trajectory.size(0)//self.omega) + drop_last*[trajectory.size(0)%self.omega]
-                trajectory = torch.split(trajectory, split_sizes)[0+(not drop_last):len(split_sizes)-drop_last]
-                # Save for quick access
-                self.trajectory = list(trajectory)
-                # Update file index
-                self.idx += 1
-            # Return x_t and x_{t+1} (without forcing) and remove the former
-            yield self.trajectory.pop(0), self.trajectory[0][..., :-2]
-        self.idx = 0
-
-fusion_dataset = DataLoader(FusionDataset(), batch_size=16)
+        while len(self.filepaths)>0:
+            # Reset if trajectory is empty
+            if ((self.i+2)*self.omega)>self.trajectory.size(0):
+                self.reset() # HOW TO LET TRAINER KNOW THAT A NEW TRAJECTORY STARTS?
+            # Return x_t and x_{t+1} (without forcing)
+            x_t = self.trajectory[self.i*self.omega:(self.i+1)*self.omega]
+            x_tplus1 = self.trajectory[(self.i+1)*self.omega:(self.i+2)*self.omega,...,:-2]
+            self.i += 1
+            yield x_t, x_tplus1
+        self.filepaths = self.get_filepaths()
 
 def plot_1d_statistic_over_time(data, statistic_idx, title):
     """
