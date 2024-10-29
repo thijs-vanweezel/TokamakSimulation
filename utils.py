@@ -104,18 +104,18 @@ def plot_loss(filepath="./results/basic0/history.json"):
     ax1.set_ylabel("Küllback-Leibler divergence");
     ax1.set_title("Training Loss");
     ax1.plot(
-        list(map(lambda epoch: epoch["kl_loss"], train_loss_history)), 
+        train_loss_history["kl_loss"], 
         color="black", 
         label="Küllback-Leibler divergence",
         linestyle="--"
     );
-    plt.legend();
+    fig.legend();
     ax2 = ax1.twinx();
     ax2.set_ylabel("Reconstruction loss");
     ax2.plot(
-        list(map(lambda epoch: epoch["rec_loss"], train_loss_history)), 
+        train_loss_history["rec_loss"], 
         color="black", 
         label="Reconstruction loss",
         linestyle=":"
     );
-    plt.legend();
+    fig.legend();
