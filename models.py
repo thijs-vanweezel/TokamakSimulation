@@ -20,7 +20,6 @@ class Forward(keras.Model):
             keras.layers.GroupNormalization(groups=-1),
             keras.layers.Activation("silu")    
         ])
-        self.scaler = keras.layers.Normalization()
         self.conv1x1_1 = keras.layers.Conv2D(32, (1, 1), padding="same")
         self.block1 = block(32)
         self.pool1 = keras.layers.MaxPooling2D((1, 2))
@@ -33,8 +32,6 @@ class Forward(keras.Model):
         self.block4 = block(256)
 
     def call(self, x_t):
-        x_t = self.scaler(x_t)
-
         h_ = self.conv1x1_1(x_t)
         h = self.block1(x_t)
         h = keras.layers.add([h, h_]) # residual connection
