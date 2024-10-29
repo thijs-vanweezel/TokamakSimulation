@@ -2,9 +2,9 @@ import os
 os.environ["KERAS_BACKEND"] = "torch"
 import keras, math
 
-def log_normal_diag(x, mu, log_var):
-    log_p = -0.5 * keras.ops.log(2. * math.pi) - 0.5 * log_var - 0.5 * keras.ops.exp(-log_var) * (x - mu)**2.
-    return log_p
+def reparameterize(mu, log_var):
+    eps = keras.random.normal(shape=keras.ops.shape(mu))
+    return mu + keras.ops.exp(log_var/2.)*eps
 
 class Forward(keras.Model):
     """
@@ -62,20 +62,11 @@ class Prior(keras.Model):
             keras.layers.Conv2DTranspose(512, (3, 3), padding="same"),
         ])
 
-    @staticmethod
-    def reparameterize(mu, log_var):
-        eps = keras.random.normal(shape=keras.ops.shape(mu))
-        return mu + keras.ops.exp(log_var/2.)*eps
-
     def call(self, h_t):
-        mu_log_var = self.net(h_t)
-        mu, log_var = keras.ops.split(mu_log_var, 2, axis=-1)
-        z = self.reparameterize(mu, log_var)
-        return z, mu, log_var
-    
-    def log_prob(self, h_t, z):
-        _, mu, log_var = self(h_t)
-        return log_normal_diag(z, mu, log_var)
+        mu_logvar = self.net(h_t)
+        mu, logvar = keras.ops.split(mu_logvar, 2, axis=-1)
+        z = reparameterize(mu, logvar)
+        return z, mu, logvar
 
 class Posterior(keras.Model):
     def __init__(self, **kwargs):
@@ -86,16 +77,13 @@ class Posterior(keras.Model):
             keras.layers.Conv2DTranspose(512, (3, 3), padding="same"),
         ])
 
-    def call(self, h_t, x_t_plus1):
-        # Assume h_t and x_t_plus1 have equal dimensions
-        mu_log_var = keras.layers.concatenate([h_t, x_t_plus1])
-        mu_log_var = self.net(mu_log_var)
-        mu, log_var = keras.ops.split(mu_log_var, 2, axis=-1)
-        z = Prior.reparameterize(mu, log_var)
-        return z, mu, log_var
-
-    def log_prob(self, z, mu, log_var):
-        return log_normal_diag(z, mu, log_var)
+    def call(self, h_t, x_tplus1):
+        # Assume h_t and x_tplus1 have equal dimensions
+        c = keras.layers.concatenate([h_t, x_tplus1])
+        mu_logvar = self.net(c)
+        mu, logvar = keras.ops.split(mu_logvar, 2, axis=-1)
+        z = reparameterize(mu, logvar)
+        return z, mu, logvar
 
 class Decoder(keras.Model):
     def __init__(self, **kwargs):
@@ -133,15 +121,5 @@ class Decoder(keras.Model):
         x = self.block3(x)
         x = keras.layers.add([x, x_])
 
-        x_t_plus1_hat = self.block4(x)
-        return x_t_plus1_hat
-
-    @staticmethod
-    def log_bernoulli(x, p):
-        eps = 1.e-5
-        pp = keras.ops.clip(p, eps, 1. - eps)
-        log_p = x * keras.ops.log(pp) + (1. - x) * keras.ops.log(1. - pp)
-        return keras.ops.sum(log_p, list(range(1, keras.ops.ndim(x)))) # sum reduction
-
-    def log_prob(self, x_t_plus1, x_t_plus1_hat):
-        return self.log_bernoulli(x_t_plus1, keras.ops.sigmoid(x_t_plus1_hat))
+        x_tplus1_hat = self.block4(x)
+        return keras.ops.sigmoid(x_tplus1_hat)

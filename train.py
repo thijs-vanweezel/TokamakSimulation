@@ -1,7 +1,17 @@
-import os
+import os, math
 os.environ["KERAS_BACKEND"] = "torch"
 import keras, torch, json
 from tqdm.auto import tqdm
+
+def log_normal_diag(x, mu, log_var):
+    log_p = -0.5 * keras.ops.log(2. * math.pi) - 0.5 * log_var - 0.5 * keras.ops.exp(-log_var) * (x - mu)**2.
+    return log_p
+
+def log_bernoulli(x, p):
+    eps = 1.e-5
+    pp = keras.ops.clip(p, eps, 1. - eps)
+    log_p = x * keras.ops.log(pp) + (1. - x) * keras.ops.log(1. - pp)
+    return keras.ops.sum(log_p, keras.ops.arange(1, keras.ops.ndim(x))) # sum reduction
 
 # The only function of the code that requires backend-specific ops 
 def train_step(x_t, x_t_plus1, forward_t, forward_tplus1, prior, posterior, decoder, opt):
@@ -11,9 +21,13 @@ def train_step(x_t, x_t_plus1, forward_t, forward_tplus1, prior, posterior, deco
     # Forward pass
     h_t = forward_t(x_t)
     h_tplus1 = forward_tplus1(x_t_plus1)
-    z, mu, log_var = posterior(h_t, h_tplus1)
-    kl_nll = keras.ops.sum(posterior.log_prob(z, mu, log_var) - prior.log_prob(h_t, z), axis=(1,2,3)) # Sum reduction
-    rec_ll = decoder.log_prob(x_t_plus1, decoder(z, h_t))
+    z, mu, logvar = posterior(h_t, h_tplus1)
+    _, *mu_logvar = prior(h_t)
+    kl_nll = keras.ops.sum(
+        log_normal_diag(z, mu, logvar) - log_normal_diag(z, *mu_logvar), 
+        axis=keras.ops.arange(1, keras.ops.ndim(z))  # Sum reduction
+    )
+    rec_ll = log_bernoulli(x_t_plus1, decoder(z, h_t))
     loss = keras.ops.mean(-rec_ll + kl_nll)
 
     # Prepare backward pass
