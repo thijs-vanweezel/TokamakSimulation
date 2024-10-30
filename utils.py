@@ -2,7 +2,7 @@ import os
 os.environ["KERAS_BACKEND"] = "torch"
 import keras, json, numpy as np, torch
 from matplotlib import pyplot as plt
-from torch.utils.data import IterableDataset
+from torch.utils.data import IterableDataset, Sampler
 
 class FusionDataset(IterableDataset):
     """
@@ -20,25 +20,6 @@ class FusionDataset(IterableDataset):
         self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
         self.omega = omega
         self.std = self.mean = None
-        self.reset()
-    def reset(self):
-        """
-        Start from the beginning of a random trajectory with random length.
-        """
-        # Load random trajectory and forcing variables
-        idx = torch.randint(0, len(self.filepaths), (1,)).item()
-        x, f = np.load(self.filepaths.pop(idx)).values()
-        x, f = torch.tensor(x, device=self.device), torch.tensor(f, device=self.device)
-        trajectory = torch.concat([x,f], dim=-1)
-        # Scale
-        trajectory = self.scale(trajectory)
-        # Trim to random lenth for push-forward training
-        length = torch.randint(low=2, high=trajectory.size(0)//self.omega+1, size=(1,)).item()*self.omega
-        start_idx = torch.randint(0, trajectory.size(0)-length+1, (1,)).item()
-        trajectory = trajectory[start_idx:start_idx+length]
-        # Save for quick access
-        self.trajectory = trajectory
-        self.i = 0
     def scale(self, x):
         # Calculate parameters once
         if self.std is None:
@@ -49,15 +30,52 @@ class FusionDataset(IterableDataset):
         return x * self.std + self.mean
     def __iter__(self):
         while len(self.filepaths)>0:
-            # Reset if trajectory is empty
-            if ((self.i+2)*self.omega)>self.trajectory.size(0):
-                self.reset() # HOW TO LET TRAINER KNOW THAT A NEW TRAJECTORY STARTS?
-            # Return x_t and x_{t+1} (without forcing)
-            x_t = self.trajectory[self.i*self.omega:(self.i+1)*self.omega]
-            x_tplus1 = self.trajectory[(self.i+1)*self.omega:(self.i+2)*self.omega,...,:-2]
-            self.i += 1
-            yield x_t, x_tplus1
+            # Load random trajectory and forcing variables
+            idx = torch.randint(0, len(self.filepaths), (1,)).item()
+            x, f = np.load(self.filepaths.pop(idx)).values()
+            x, f = torch.tensor(x, device=self.device), torch.tensor(f, device=self.device)
+            trajectory = torch.concat([x,f], dim=-1)
+            # Scale
+            trajectory = self.scale(trajectory)
+            # Trim to random lenth for push-forward training
+            length = torch.randint(low=2, high=trajectory.size(0)//self.omega+1, size=(1,)).item()*self.omega
+            start_idx = torch.randint(0, trajectory.size(0)-length+1, (1,)).item()
+            trajectory = trajectory[start_idx:start_idx+length]
+            # Return entire trajectory
+            yield torch.split(trajectory, self.omega)
         self.filepaths = self.get_filepaths()
+
+class TrajectoryPreservingSampler(Sampler):
+    def __init__(self, dataset, batch_size):
+        super().__init__()
+        self.dataset = iter(dataset)
+        self.batch_size = batch_size
+        self.storage = [[] for _ in range(batch_size)]
+        self.empty_indices = lambda: [index for index, trajectory in enumerate(self.storage) if len(trajectory)<=1]
+
+    def fill_storage(self):
+        # Mask for where training should inject true starting point
+        self.mask = [True]*self.batch_size
+        # While storage contains trajectories with unavailable tplus1
+        empty_indices = self.empty_indices()
+        while empty_indices:
+            try:
+                # Fill new trajectory
+                idx = empty_indices.pop(0)
+                self.storage[idx] = list(next(self.dataset))
+                self.mask[idx] = False
+        # Signal that dataset is empty or not
+            except StopIteration:
+                return False
+        return True
+    
+    def __iter__(self):
+        # while dataset is not empty
+        while self.fill_storage():
+            # Get x_t and x_tplus1 (without force) and remove the former
+            batch_t = [self.storage[i].pop(0) for i in range(self.batch_size)]
+            batch_tplus1 = [self.storage[i][0] for i in range(self.batch_size)]
+            yield torch.stack(batch_t), torch.stack(batch_tplus1)[...,:-2]
 
 def plot_1d_statistic_over_time(data, statistic_idx, title):
     """

@@ -11,23 +11,24 @@ def log_bernoulli(x, p):
     eps = 1.e-5
     pp = keras.ops.clip(p, eps, 1. - eps)
     log_p = x * keras.ops.log(pp) + (1. - x) * keras.ops.log(1. - pp)
-    return keras.ops.sum(log_p, keras.ops.arange(1, keras.ops.ndim(x))) # sum reduction
+    return keras.ops.sum(log_p, list(range(1, keras.ops.ndim(x)))) # sum reduction
 
 # The only function of the code that requires backend-specific ops 
-def train_step(x_t, x_t_plus1, forward_t, forward_tplus1, prior, posterior, decoder, opt):
+def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, opt):
     # Move to gpu
     x_t = x_t.to("cuda")
-    x_t_plus1 = x_t_plus1.to("cuda")
+    x_tplus1 = x_tplus1.to("cuda")
     # Forward pass
     h_t = forward_t(x_t)
-    h_tplus1 = forward_tplus1(x_t_plus1)
+    h_tplus1 = forward_tplus1(x_tplus1)
     z, mu, logvar = posterior(h_t, h_tplus1)
+    x_tplus1_hat = decoder(z, h_t)
     _, *mu_logvar = prior(h_t)
     kl_nll = keras.ops.sum(
         log_normal_diag(z, mu, logvar) - log_normal_diag(z, *mu_logvar), 
-        axis=keras.ops.arange(1, keras.ops.ndim(z))  # Sum reduction
+        axis=list(range(1, keras.ops.ndim(z)))  # Sum reduction
     )
-    rec_ll = log_bernoulli(x_t_plus1, decoder(z, h_t))
+    rec_ll = log_bernoulli(x_tplus1, x_tplus1_hat)
     loss = keras.ops.mean(-rec_ll + kl_nll)
 
     # Prepare backward pass
@@ -46,17 +47,26 @@ def train_step(x_t, x_t_plus1, forward_t, forward_tplus1, prior, posterior, deco
         opt.apply_gradients(zip(gradients, trainable_weights))
 
     # Return loss interpretably
-    return keras.ops.mean(kl_nll).item(), keras.ops.mean(-rec_ll).item()
+    return x_tplus1_hat, keras.ops.mean(kl_nll).item(), keras.ops.mean(-rec_ll).item()
 
-def run(dataloader, forward_t, forward_tplus1, prior, posterior, decoder, optimizer, n_epochs=100):
+def run(data, forward_t, forward_tplus1, prior, posterior, decoder, optimizer, n_epochs=100):
     # Loop over epochs
     train_loss_history = {"kl_loss": [0]*n_epochs, "rec_loss": [0]*n_epochs}
     os.makedirs("./results/basic0", exist_ok=True)
     for i in tqdm(range(n_epochs)):
         # Loop over batches
-        for j, (x_t, x_tplus1) in enumerate(dataloader, 1):
+        for j, (x_t, x_tplus1) in enumerate(data, 1):
+            # Prepare pushforward training
+            if j==1:
+                x_t_hat = x_t
+            else:
+                mask = keras.ops.reshape(data.mask, (-1,1,1,1))
+                if False in mask:
+                    print("new starting point injected")
+                x_t_hat = keras.ops.where(mask, x_t_hat.detach(), x_t[...,:-2])
+                x_t_hat = keras.ops.concatenate([x_t_hat, x_t[...,-2:]], axis=-1)
             # Train
-            kl_loss, rec_loss = train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, optimizer)
+            x_t_hat, kl_loss, rec_loss = train_step(x_t_hat, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, optimizer)
             # Just a fancy way to append the mean
             train_loss_history["kl_loss"][i] = train_loss_history["kl_loss"][i]*(1-1/j) + 1/j*kl_loss
             train_loss_history["rec_loss"][i] = train_loss_history["rec_loss"][i]*(1-1/j) + 1/j*rec_loss
