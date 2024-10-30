@@ -13,9 +13,9 @@ class FusionDataset(IterableDataset):
     \t- `device` (str): Torch device, either "cuda" or "cpu".
     \t- `omega` (int): Size of trajectory chunks.
     """
-    def __init__(self, data_dir:str="./data/preprocessed/", device:str=None, omega:int=20):
+    def __init__(self, data_dir:str, device:str=None, omega:int=20):
         super().__init__()
-        self.get_filepaths = lambda: [os.path.join(root, file) for root, _, files in os.walk(data_dir) for file in files]
+        self.get_filepaths = lambda: [os.path.join(root, file) for root, _, files in os.walk(data_dir) for file in files if file.endswith(".npz")]
         self.filepaths = self.get_filepaths()
         self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
         self.omega = omega
