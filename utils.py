@@ -88,13 +88,14 @@ def plot_1d_statistic_over_time(data, statistic_idx, title):
     """
     print(data.shape)
     print(data[:, :, statistic_idx].shape)
-    plt.figure(figsize=(12, 6))
+    fig = plt.figure(figsize=(12, 6))
     plt.imshow(data[:, :, statistic_idx].T, aspect="auto", cmap="viridis")
     plt.colorbar()
     plt.title(title)
     plt.xlabel("Time")
     plt.ylabel("Position on magnetic line")
     plt.show()
+    return fig
 
 def generate(true_trajectory, forward_t, prior, decoder):
     """
