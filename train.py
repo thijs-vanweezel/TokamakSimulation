@@ -61,9 +61,7 @@ def run(data, forward_t, forward_tplus1, prior, posterior, decoder, optimizer, n
                 x_t_hat = x_t
             else:
                 mask = keras.ops.reshape(data.mask, (-1,1,1,1))
-                if False in mask:
-                    print("new starting point injected")
-                x_t_hat = keras.ops.where(mask, x_t_hat.detach(), x_t[...,:-2])
+                x_t_hat = keras.ops.where(mask, x_t_hat.detach(), x_t[...,:-2]) # detach used in favor of retain_graph
                 x_t_hat = keras.ops.concatenate([x_t_hat, x_t[...,-2:]], axis=-1)
             # Train
             x_t_hat, kl_loss, rec_loss = train_step(x_t_hat, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, optimizer)
