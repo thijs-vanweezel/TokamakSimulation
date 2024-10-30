@@ -103,7 +103,7 @@ class Decoder(keras.Model):
         self.block2 = block(128)
         self.conv1x1_3 = keras.layers.Conv2DTranspose(64, (1, 1), strides=(1, 2), padding="same")
         self.block3 = block(64)
-        self.block4 = block(6, "linear", (1, 1))
+        self.block4 = block(6, "sigmoid", (1, 1))
 
     def call(self, z, h_t):
         x = keras.layers.concatenate([z, h_t])
@@ -122,4 +122,4 @@ class Decoder(keras.Model):
         x = keras.layers.add([x, x_])
 
         x_tplus1_hat = self.block4(x)
-        return keras.ops.sigmoid(x_tplus1_hat)
+        return x_tplus1_hat
