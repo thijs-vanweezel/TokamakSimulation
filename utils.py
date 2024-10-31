@@ -13,21 +13,27 @@ class FusionDataset(IterableDataset):
     \t- `device` (str): Torch device, either "cuda" or "cpu".
     \t- `omega` (int): Size of trajectory chunks.
     """
-    def __init__(self, data_dir:str, device:str=None, omega:int=20):
+    def __init__(self, data_dir:str, device:str=None, omega:int=20, max_instances=None):
         super().__init__()
         self.get_filepaths = lambda: [os.path.join(root, file) for root, _, files in os.walk(data_dir) for file in files if file.endswith(".npz")]
-        self.filepaths = self.get_filepaths()
+        if max_instances: 
+             self.filepaths = self.get_filepaths()[:max_instances]
+        else: 
+            self.filepaths = self.get_filepaths
         self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
         self.omega = omega
         self.std = self.mean = None
+
     def scale(self, x):
         # Calculate parameters once
         if self.std is None:
             self.std, self.mean = torch.std_mean(x)
         # Scale
         return (x - self.mean) / self.std
+    
     def unscale(self, x):
         return x * self.std + self.mean
+    
     def __iter__(self):
         while len(self.filepaths)>0:
             # Load random trajectory and forcing variables
