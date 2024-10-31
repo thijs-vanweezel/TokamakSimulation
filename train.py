@@ -49,8 +49,8 @@ def pde_loss(pred, true, B, x):
 # The only function of the code that requires backend-specific ops 
 def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, opt, x_tensor, b_field):
     # Move to gpu
-    #x_t = x_t.to("cuda")
-    #x_tplus1 = x_tplus1.to("cuda")
+    x_t = x_t.to("cuda")
+    x_tplus1 = x_tplus1.to("cuda")
     # Forward pass
     h_t = forward_t(x_t)
     h_tplus1 = forward_tplus1(x_tplus1)
@@ -86,8 +86,8 @@ def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decod
 
 def val_step(x_t, x_tplus1, forward_t, prior, decoder):
     # Move to gpu
-    #x_t = x_t.to("cuda")
-    #x_tplus1 = x_tplus1.to("cuda")
+    x_t = x_t.to("cuda")
+    x_tplus1 = x_tplus1.to("cuda")
     # Forward pass
     h_t = forward_t(x_t)
     z, *_  = prior(h_t)
