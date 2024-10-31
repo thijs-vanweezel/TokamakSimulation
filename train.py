@@ -11,7 +11,7 @@ def log_bernoulli(x, p):
     eps = 1.e-5
     pp = keras.ops.clip(p, eps, 1. - eps)
     log_p = x * keras.ops.log(pp) + (1. - x) * keras.ops.log(1. - pp)
-    return keras.ops.sum(log_p, list(range(1, keras.ops.ndim(x)))) # sum reduction
+    return keras.ops.sum(log_p, [1,2,3]) # sum reduction
 
 # The only function of the code that requires backend-specific ops 
 def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, opt):
@@ -26,10 +26,10 @@ def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decod
     _, *mu_logvar = prior(h_t)
     kl_nll = keras.ops.sum(
         log_normal_diag(z, mu, logvar) - log_normal_diag(z, *mu_logvar), 
-        axis=list(range(1, keras.ops.ndim(z)))  # Sum reduction
+        axis=[1,2,3]  # sum reduction
     )
     rec_ll = log_bernoulli(x_tplus1, x_tplus1_hat)
-    loss = keras.ops.mean(-rec_ll + kl_nll)
+    loss = keras.ops.mean(-rec_ll + kl_nll) # mean reduction
 
     # Prepare backward pass
     forward_t.zero_grad()
@@ -49,18 +49,30 @@ def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decod
     # Return loss interpretably
     return x_tplus1_hat, keras.ops.mean(kl_nll).item(), keras.ops.mean(-rec_ll).item()
 
-def run(data, forward_t, forward_tplus1, prior, posterior, decoder, optimizer, n_epochs=100):
+def val_step(x_t, x_tplus1, forward_t, prior, decoder):
+    # Move to gpu
+    x_t = x_t.to("cuda")
+    x_tplus1 = x_tplus1.to("cuda")
+    # Forward pass
+    h_t = forward_t(x_t)
+    z, *_  = prior(h_t)
+    x_tplus1_hat = decoder(z, h_t)
+    # Return reconstruction loss
+    return -log_bernoulli(x_tplus1, x_tplus1_hat)
+
+def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, decoder, optimizer, save_dir, max_epochs):
     # Loop over epochs
-    train_loss_history = {"kl_loss": [0]*n_epochs, "rec_loss": [0]*n_epochs}
-    os.makedirs("./results/basic0", exist_ok=True)
-    for i in tqdm(range(n_epochs)):
+    train_loss_history = {"kl_loss": [0]*max_epochs, "rec_loss": [0]*max_epochs}
+    val_loss_hist = []
+    os.makedirs(save_dir, exist_ok=True)
+    for i in tqdm(range(max_epochs)):
         # Loop over batches
-        for j, (x_t, x_tplus1) in enumerate(data, 1):
+        for j, (x_t, x_tplus1) in enumerate(train_loader, 1):
             # Prepare pushforward training
             if j==1:
                 x_t_hat = x_t
             else:
-                mask = keras.ops.reshape(data.mask, (-1,1,1,1))
+                mask = keras.ops.reshape(train_loader.mask, (-1,1,1,1))
                 x_t_hat = keras.ops.where(mask, x_t_hat.detach(), x_t[...,:-2]) # detach used in favor of retain_graph
                 x_t_hat = keras.ops.concatenate([x_t_hat, x_t[...,-2:]], axis=-1)
             # Train
@@ -68,12 +80,19 @@ def run(data, forward_t, forward_tplus1, prior, posterior, decoder, optimizer, n
             # Just a fancy way to append the mean
             train_loss_history["kl_loss"][i] = train_loss_history["kl_loss"][i]*(1-1/j) + 1/j*kl_loss
             train_loss_history["rec_loss"][i] = train_loss_history["rec_loss"][i]*(1-1/j) + 1/j*rec_loss
+        # Validation
+        val_loss = 0
+        for k, (x_t, x_tplus1) in enumerate(val_loader, 1):
+            val_loss += val_step(x_t, x_tplus1, forward_t, prior, decoder)
+        val_loss_hist.append(val_loss/k)
+        if (i!=0) and (val_loss>val_loss_hist[i-1]):
+            break
         # Save models 
-        forward_t.save("./results/basic0/forward_t.keras")
-        forward_tplus1.save("./results/basic0/forward_tplus1.keras")
-        prior.save("./results/basic0/prior.keras")
-        posterior.save("./results/basic0/posterior.keras")
-        decoder.save("./results/basic0/decoder.keras")
-        # Save training history
-        with open("./results/basic0/history.json", "w") as f:
-            json.dump(train_loss_history, f)
+        forward_t.save(f"{save_dir}/forward_t.keras")
+        forward_tplus1.save(f"{save_dir}/forward_tplus1.keras")
+        prior.save(f"{save_dir}/prior.keras")
+        posterior.save(f"{save_dir}/posterior.keras")
+        decoder.save(f"{save_dir}/decoder.keras")
+        # Save training history (trimmed to exclude default zeros)
+        with open(f"{save_dir}/history.json", "w") as f:
+            json.dump(train_loss_history[:train_loss_history.index(0)], f)
