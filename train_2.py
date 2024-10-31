@@ -49,7 +49,7 @@ def pde_loss(pred, true, B, x):
 def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, opt, x_tensor, b_field):
     # Forward pass
     device = torch.device("cpu")
-
+    assert x_t.device == x_tensor.device == b_field.device
     x_t, x_tplus1 = x_t.to(device), x_tplus1.to(device)
     h_t = forward_t(x_t)
     h_tplus1 = forward_tplus1(x_tplus1)
@@ -60,6 +60,7 @@ def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decod
         log_normal_diag(z, mu, logvar) - log_normal_diag(z, *mu_logvar), 
         axis=[1,2,3]  # sum reduction
     )
+    assert x_tplus1_hat.device == device, f"x_tplus1_hat is on {x_tplus1_hat.device}, expected {device}"
     rec_ll = log_bernoulli(x_tplus1, x_tplus1_hat)
     # pde_loss_value = pde_loss(x_tplus1_hat, x_tplus1, b_field, x_tensor)
     loss = keras.ops.mean(-rec_ll + kl_nll)  # mean reduction
