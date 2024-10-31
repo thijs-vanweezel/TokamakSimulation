@@ -2,7 +2,6 @@ import os, math
 os.environ["KERAS_BACKEND"] = "torch"
 import keras, torch, json
 from tqdm.auto import tqdm
-import tensorflow as tf 
 
 def log_normal_diag(x, mu, log_var):
     log_p = -0.5 * keras.ops.log(2. * math.pi) - 0.5 * log_var - 0.5 * keras.ops.exp(-log_var) * (x - mu)**2.
@@ -16,51 +15,42 @@ def log_bernoulli(x, p):
 
 def pde_loss(pred, true, B, x):
     """
-    PDE loss function compatible with TensorFlow.
+    PDE loss function in PyTorch.
     
     Args:
-        pred: Prediction of the model x_tplus1_hat
-        true: True x_tplus1
-        B: Array of b-values (500 constant over instances and time)
-        x: Tensor, spatial position variable
-        t: Tensor, temporal position variable
+        pred: Tensor, prediction of the model (x_tplus1_hat), with shape (batch_size, num_features)
+        true: Tensor, true values (x_tplus1), with shape (batch_size, num_features)
+        B: Tensor or scalar, magnetic field strength, assumed constant over instances and time
+        x: Tensor, spatial position variable, assumed to be in shape (batch_size,)
     
     Returns:
-        f_n: Tensor, computed custom loss term
+        spatial_loss: Tensor, computed spatial loss term
     """
+    # Extract predicted and true components
     pred_n = pred[:, 0]
     pred_v_parallel = pred[:, 1]
     true_n = true[:, 0]
     true_v_parallel = true[:, 1]
-    # ## Deel 1 van de formule vgm hoeft dit dus niet anders moeten we t hebben
-    # with tf.GradientTape() as tape_t:
-    #     tape_t.watch(t)
-    #     d_pred_n_dt = tape_t.gradient(pred_n, t)
-    #     d_true_n_dt = tape_t.gradient(true_n, t)
+    
+    # Compute (predicted) n * v_parallel / B and (true) n * v_parallel / B
+    pred_n_v_parallel = (pred_n * pred_v_parallel) / B
+    true_n_v_parallel = (true_n * true_v_parallel) / B
 
-    # temporal_loss = tf.square(d_pred_n_dt - d_true_n_dt)
-
-    ## Deel 2 ? In de wor 
-    pred_n_v_parallel = pred_n * pred_v_parallel / B
-    true_n_v_parallel = true_n * true_v_parallel / B
-
-    with tf.GradientTape() as tape_x:
-        tape_x.watch(x)
-        d_pred_nv_dx = tape_x.gradient(pred_n_v_parallel, x)
-        d_true_nv_dx = tape_x.gradient(true_n_v_parallel, x)
+    # Compute spatial derivatives with respect to x
+    d_pred_nv_dx = torch.autograd.grad(pred_n_v_parallel, x, grad_outputs=torch.ones_like(pred_n_v_parallel), create_graph=True)[0]
+    d_true_nv_dx = torch.autograd.grad(true_n_v_parallel, x, grad_outputs=torch.ones_like(true_n_v_parallel), create_graph=True)[0]
 
     # Spatial loss component
-    spatial_loss = tf.square(B * (d_pred_nv_dx - d_true_nv_dx))
+    spatial_loss = torch.square(B * (d_pred_nv_dx - d_true_nv_dx))
 
-    # Props to chat ligt er dus aan of we dat eerste deel willen 
-    # f_n = tf.reduce_mean(temporal_loss) + tf.reduce_mean(spatial_loss)
-    return spatial_loss
+    # Return the mean spatial loss across the batch
+    return spatial_loss.mean()
 
 # The only function of the code that requires backend-specific ops 
 def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, opt, x_tensor, b_field):
     # Move to gpu
-    x_t = x_t.to("cuda")
-    x_tplus1 = x_tplus1.to("cuda")
+    #x_t = x_t.to("cuda")
+    #x_tplus1 = x_tplus1.to("cuda")
     # Forward pass
     h_t = forward_t(x_t)
     h_tplus1 = forward_tplus1(x_tplus1)
@@ -72,9 +62,9 @@ def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decod
         axis=[1,2,3]  # sum reduction
     )
     rec_ll = log_bernoulli(x_tplus1, x_tplus1_hat)
-    pde_loss_value = pde_loss(x_tplus1_hat, x_tplus1, b_field, x_tensor)
+    # pde_loss_value = pde_loss(x_tplus1_hat, x_tplus1, b_field, x_tensor)
     loss = keras.ops.mean(-rec_ll + kl_nll) # mean reduction
-    loss += pde_loss_value
+    # loss += pde_loss_value
   
     # Prepare backward pass
     forward_t.zero_grad()
@@ -96,8 +86,8 @@ def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decod
 
 def val_step(x_t, x_tplus1, forward_t, prior, decoder):
     # Move to gpu
-    x_t = x_t.to("cuda")
-    x_tplus1 = x_tplus1.to("cuda")
+    #x_t = x_t.to("cuda")
+    #x_tplus1 = x_tplus1.to("cuda")
     # Forward pass
     h_t = forward_t(x_t)
     z, *_  = prior(h_t)
