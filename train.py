@@ -58,7 +58,7 @@ def val_step(x_t, x_tplus1, forward_t, prior, decoder):
     z, *_  = prior(h_t)
     x_tplus1_hat = decoder(z, h_t)
     # Return reconstruction loss
-    return -log_bernoulli(x_tplus1, x_tplus1_hat)
+    return keras.ops.mean(-log_bernoulli(x_tplus1, x_tplus1_hat)).item()
 
 def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, decoder, optimizer, save_dir, max_epochs):
     # Loop over epochs
@@ -91,6 +91,7 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
         for k, (x_t, x_tplus1) in enumerate(val_loader, 1):
             val_loss += val_step(x_t, x_tplus1, forward_t, prior, decoder)
         val_loss_hist.append(val_loss/k)
+        # Early stopping
         if (i>0) and (val_loss>val_loss_hist[i-1]):
             break
         # Save models 
