@@ -62,10 +62,13 @@ def val_step(x_t, x_tplus1, forward_t, prior, decoder):
 
 def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, decoder, optimizer, save_dir, max_epochs):
     # Loop over epochs
-    train_loss_history = {"kl_loss": [0]*max_epochs, "rec_loss": [0]*max_epochs}
+    train_loss_history = {"kl_loss": [], "rec_loss": []}
     val_loss_hist = []
     os.makedirs(save_dir, exist_ok=True)
     for i in tqdm(range(max_epochs)):
+        # Initialize losses
+        train_loss_history["kl_loss"].append(0)
+        train_loss_history["rec_loss"].append(0)
         # Loop over batches
         for j, (x_t, x_tplus1) in enumerate(train_loader, 1):
             # Prepare pushforward training
@@ -77,9 +80,12 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
                 x_t_hat = keras.ops.concatenate([x_t_hat, x_t[...,-2:]], axis=-1)
             # Train
             x_t_hat, kl_loss, rec_loss = train_step(x_t_hat, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, optimizer)
-            # Just a fancy way to append the mean
-            train_loss_history["kl_loss"][i] = train_loss_history["kl_loss"][i]*(1-1/j) + 1/j*kl_loss
-            train_loss_history["rec_loss"][i] = train_loss_history["rec_loss"][i]*(1-1/j) + 1/j*rec_loss
+            # Keep track of losses
+            train_loss_history["kl_loss"][i] += kl_loss
+            train_loss_history["rec_loss"][i] += rec_loss
+        # Normalize losses
+        train_loss_history["kl_loss"][i] /= j
+        train_loss_history["rec_loss"][i] /= j
         # Validation
         val_loss = 0
         for k, (x_t, x_tplus1) in enumerate(val_loader, 1):
@@ -95,6 +101,6 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
         decoder.save(f"{save_dir}/decoder.keras")
         # Save history (trimmed to exclude default zeros)
         with open(f"{save_dir}/history.json", "w") as f:
-            json.dump(train_loss_history[:train_loss_history.index(0)], f)
+            json.dump(train_loss_history, f)
         with open(f"{save_dir}/val_history.json", "w") as f:
             json.dump(val_loss_hist, f)
