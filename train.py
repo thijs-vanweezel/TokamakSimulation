@@ -85,7 +85,7 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
         for k, (x_t, x_tplus1) in enumerate(val_loader, 1):
             val_loss += val_step(x_t, x_tplus1, forward_t, prior, decoder)
         val_loss_hist.append(val_loss/k)
-        if (i!=0) and (val_loss>val_loss_hist[i-1]):
+        if (i>0) and (val_loss>val_loss_hist[i-1]):
             break
         # Save models 
         forward_t.save(f"{save_dir}/forward_t.keras")
@@ -93,6 +93,8 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
         prior.save(f"{save_dir}/prior.keras")
         posterior.save(f"{save_dir}/posterior.keras")
         decoder.save(f"{save_dir}/decoder.keras")
-        # Save training history (trimmed to exclude default zeros)
+        # Save history (trimmed to exclude default zeros)
         with open(f"{save_dir}/history.json", "w") as f:
             json.dump(train_loss_history[:train_loss_history.index(0)], f)
+        with open(f"{save_dir}/val_history.json", "w") as f:
+            json.dump(val_loss_hist, f)
