@@ -75,7 +75,7 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
             if j==1:
                 x_t_hat = x_t
             else:
-                mask = keras.ops.reshape(train_loader.mask, (-1,1,1,1))
+                mask = keras.ops.reshape(train_loader.dataset.mask, (-1,1,1,1))
                 x_t_hat = keras.ops.where(mask, x_t_hat.detach(), x_t[...,:-2]) # detach used in favor of retain_graph
                 x_t_hat = keras.ops.concatenate([x_t_hat, x_t[...,-2:]], axis=-1)
             # Train
