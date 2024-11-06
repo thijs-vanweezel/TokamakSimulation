@@ -100,12 +100,12 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
         else:
             # Reset patience
             patience = 0
-            # Save models 
-            forward_t.save(f"{save_dir}/forward_t.keras")
-            forward_tplus1.save(f"{save_dir}/forward_tplus1.keras")
-            prior.save(f"{save_dir}/prior.keras")
-            posterior.save(f"{save_dir}/posterior.keras")
-            decoder.save(f"{save_dir}/decoder.keras")
+            # Save models (keras.saving.save_model causes inconsisteny)
+            forward_t.save_weights(f"{save_dir}/forward_t.weights.h5")
+            forward_tplus1.save_weights(f"{save_dir}/forward_tplus1.weights.h5")
+            prior.save_weights(f"{save_dir}/prior.weights.h5")
+            posterior.save_weights(f"{save_dir}/posterior.weights.h5")
+            decoder.save_weights(f"{save_dir}/decoder.weights.h5")
             # Save history 
             with open(f"{save_dir}/history.json", "w") as f:
                 json.dump(train_loss_history, f)
