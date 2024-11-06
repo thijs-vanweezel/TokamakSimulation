@@ -3,6 +3,8 @@ os.environ["KERAS_BACKEND"] = "torch"
 import keras, torch, json
 from tqdm.auto import tqdm
 
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
 def log_normal_diag(x, mu, log_var):
     log_p = -0.5 * keras.ops.log(2. * math.pi) - 0.5 * log_var - 0.5 * keras.ops.exp(-log_var) * (x - mu)**2.
     return log_p
@@ -10,8 +12,8 @@ def log_normal_diag(x, mu, log_var):
 # The only function of the code that requires backend-specific ops 
 def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, opt):
     # Move to gpu
-    x_t = x_t.to("cuda")
-    x_tplus1 = x_tplus1.to("cuda")
+    x_t = x_t.to(DEVICE)
+    x_tplus1 = x_tplus1.to(DEVICE)
     # Forward pass
     h_t = forward_t(x_t)
     h_tplus1 = forward_tplus1(x_tplus1)
@@ -48,8 +50,8 @@ def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decod
 
 def val_step(x_t, x_tplus1, forward_t, prior, decoder):
     # Move to gpu
-    x_t = x_t.to("cuda")
-    x_tplus1 = x_tplus1.to("cuda")
+    x_t = x_t.to(DEVICE)
+    x_tplus1 = x_tplus1.to(DEVICE)
     # Forward pass
     h_t = forward_t(x_t)
     z, *_  = prior(h_t)
