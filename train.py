@@ -11,7 +11,7 @@ def log_bernoulli(x, p):
     eps = 1.e-5
     pp = keras.ops.clip(p, eps, 1. - eps)
     log_p = x * keras.ops.log(pp) + (1. - x) * keras.ops.log(1. - pp)
-    return keras.ops.sum(log_p, [1,2,3]) # sum reduction
+    return keras.ops.mean(log_p, [1,2,3]) # mean reduction
 
 # The only function of the code that requires backend-specific ops 
 def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, opt):
@@ -24,9 +24,9 @@ def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decod
     z, mu, logvar = posterior(h_t, h_tplus1)
     x_tplus1_hat = decoder(z, h_t)
     _, *mu_logvar = prior(h_t)
-    kl_nll = keras.ops.sum(
+    kl_nll = keras.ops.mean(
         log_normal_diag(z, mu, logvar) - log_normal_diag(z, *mu_logvar), 
-        axis=[1,2,3]  # sum reduction
+        axis=[1,2,3]  # mean reduction
     )
     rec_ll = log_bernoulli(x_tplus1, x_tplus1_hat)
     loss = keras.ops.mean(-rec_ll + kl_nll) # mean reduction
