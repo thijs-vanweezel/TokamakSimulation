@@ -60,8 +60,9 @@ def val_step(x_t, x_tplus1, forward_t, prior, decoder):
     # Return reconstruction loss
     return keras.ops.mean(-log_bernoulli(x_tplus1, x_tplus1_hat)).item()
 
-def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, decoder, optimizer, save_dir, max_epochs):
+def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, decoder, optimizer, save_dir, max_epochs, max_patience=5):
     # Loop over epochs
+    patience = 0
     train_loss_history = {"kl_loss": [], "rec_loss": []}
     val_loss_hist = []
     os.makedirs(save_dir, exist_ok=True)
@@ -91,10 +92,14 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
         for k, (x_t, x_tplus1) in enumerate(val_loader, 1):
             val_loss += val_step(x_t, x_tplus1, forward_t, prior, decoder)
         val_loss_hist.append(val_loss/k)
-        # Early stopping
+        # Early stopping with patience
         if (i>0) and ((val_loss/k)>val_loss_hist[i-1]):
-            break
+            patience += 1
+            if patience>max_patience:
+                break
         else:
+            # Reset patience
+            patience = 0
             # Save models 
             forward_t.save(f"{save_dir}/forward_t.keras")
             forward_tplus1.save(f"{save_dir}/forward_tplus1.keras")
