@@ -92,7 +92,7 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
             val_loss += val_step(x_t, x_tplus1, forward_t, prior, decoder)
         val_loss_hist.append(val_loss/k)
         # Early stopping
-        if (i>0) and (val_loss>val_loss_hist[i-1]):
+        if (i>0) and ((val_loss/k)>val_loss_hist[i-1]):
             break
         else:
             # Save models 
