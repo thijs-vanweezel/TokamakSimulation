@@ -27,7 +27,6 @@ class FusionDataset(IterableDataset):
     def scale(self, x):
         # Calculate parameters once
         if self.std is None:
-            print(x.shape)
             self.std, self.mean = torch.std_mean(x, dim=[0,1])
         # Scale
         return (x - self.mean) / self.std
@@ -113,7 +112,13 @@ def generate(true_trajectory, forward_t, prior, decoder):
         gen_trajectory.append(x_tplus1_hat)
     return gen_trajectory
 
-def plot_loss(filepath="./results/basic0/history.json"):
+def plot_loss(filepath):
+    """
+    Plots the training loss with separate axes from a JSON file.
+    Args:
+        filepath (str): The path to the JSON file containing the training loss history, 
+        consisting of Küllback-Leibler divergence and reconstruction loss.  
+    """
     # Load training history
     with open(filepath, "r") as f:
         train_loss_history = json.load(f)
