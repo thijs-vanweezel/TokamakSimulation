@@ -93,7 +93,7 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
             val_loss += val_step(x_t, x_tplus1, forward_t, prior, decoder)
         val_loss_hist.append(val_loss/k)
         # Early stopping with patience
-        if (i>0) and ((val_loss/k)>val_loss_hist[i-1]):
+        if (i>0) and ((val_loss/k)>min(val_loss_hist)):
             patience += 1
             if patience>max_patience:
                 break
