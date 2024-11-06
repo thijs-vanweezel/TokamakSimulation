@@ -94,14 +94,15 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
         # Early stopping
         if (i>0) and (val_loss>val_loss_hist[i-1]):
             break
-        # Save models 
-        forward_t.save(f"{save_dir}/forward_t.keras")
-        forward_tplus1.save(f"{save_dir}/forward_tplus1.keras")
-        prior.save(f"{save_dir}/prior.keras")
-        posterior.save(f"{save_dir}/posterior.keras")
-        decoder.save(f"{save_dir}/decoder.keras")
-        # Save history (trimmed to exclude default zeros)
-        with open(f"{save_dir}/history.json", "w") as f:
-            json.dump(train_loss_history, f)
-        with open(f"{save_dir}/val_history.json", "w") as f:
-            json.dump(val_loss_hist, f)
+        else:
+            # Save models 
+            forward_t.save(f"{save_dir}/forward_t.keras")
+            forward_tplus1.save(f"{save_dir}/forward_tplus1.keras")
+            prior.save(f"{save_dir}/prior.keras")
+            posterior.save(f"{save_dir}/posterior.keras")
+            decoder.save(f"{save_dir}/decoder.keras")
+            # Save history 
+            with open(f"{save_dir}/history.json", "w") as f:
+                json.dump(train_loss_history, f)
+            with open(f"{save_dir}/val_history.json", "w") as f:
+                json.dump(val_loss_hist, f)
