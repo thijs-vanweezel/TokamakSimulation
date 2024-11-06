@@ -27,7 +27,8 @@ class FusionDataset(IterableDataset):
     def scale(self, x):
         # Calculate parameters once
         if self.std is None:
-            self.std, self.mean = torch.std_mean(x)
+            print(x.shape)
+            self.std, self.mean = torch.std_mean(x, dim=[0,1])
         # Scale
         return (x - self.mean) / self.std
     def unscale(self, x):
