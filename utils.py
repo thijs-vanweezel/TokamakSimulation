@@ -33,7 +33,7 @@ class FusionDataset(IterableDataset):
         return (x - self.minimum) / (self.maximum - self.minimum)
     def unscale(self, x):
         return x * (self.maximum - self.minimum) + self.minimum
-    def get_trajectory(self):
+    def get_trajectory(self, pushforward=True):
         # Load random trajectory and forcing variables
         idx = torch.randint(0, len(self.filepaths), (1,)).item()
         x, f = np.load(self.filepaths.pop(idx)).values()
@@ -41,10 +41,11 @@ class FusionDataset(IterableDataset):
         trajectory = torch.concat([x,f], dim=-1)
         # Scale
         trajectory = self.scale(trajectory)
-        # Trim to random lenth for push-forward training
-        length = torch.randint(low=2, high=trajectory.size(0)//self.omega+1, size=(1,)).item()*self.omega
-        start_idx = torch.randint(0, trajectory.size(0)-length+1, (1,)).item()
-        trajectory = trajectory[start_idx:start_idx+length]
+        if pushforward:
+            # Trim to random lenth for push-forward training
+            length = torch.randint(low=2, high=trajectory.size(0)//self.omega+1, size=(1,)).item()*self.omega
+            start_idx = torch.randint(0, trajectory.size(0)-length+1, (1,)).item()
+            trajectory = trajectory[start_idx:start_idx+length]
         return list(torch.split(trajectory, self.omega))
     def fill_trajectories(self):
         # Mask for where training should inject true starting point
