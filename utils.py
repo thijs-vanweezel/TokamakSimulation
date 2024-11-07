@@ -36,7 +36,8 @@ class FusionDataset(IterableDataset):
     def get_trajectory(self, pushforward=True):
         # Load random trajectory and forcing variables
         idx = torch.randint(0, len(self.filepaths), (1,)).item()
-        x, f = np.load(self.filepaths.pop(idx)).values()
+        file = self.filepaths.pop(idx)
+        x, f = np.load(file).values()
         x, f = torch.tensor(x, device=self.device), torch.tensor(f, device=self.device)
         trajectory = torch.concat([x,f], dim=-1)
         # Scale
@@ -46,7 +47,11 @@ class FusionDataset(IterableDataset):
             length = torch.randint(low=2, high=trajectory.size(0)//self.omega+1, size=(1,)).item()*self.omega
             start_idx = torch.randint(0, trajectory.size(0)-length+1, (1,)).item()
             trajectory = trajectory[start_idx:start_idx+length]
-        return list(torch.split(trajectory, self.omega))[:-(not pushforward) or None]
+            return list(torch.split(trajectory, self.omega))
+        else:
+            # So that we can connect the generated trajectory to the correct PDE variables for evaluation
+            print(file)
+            return list(torch.split(trajectory, self.omega))[:-1]
     def fill_trajectories(self):
         # Mask for where training should inject true starting point
         self.mask = [True]*len(self.trajectories)
