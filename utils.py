@@ -23,6 +23,7 @@ class FusionDataset(IterableDataset):
         self.omega = omega
         self.trajectories = [[] for _ in range(batch_size)]
         self.batch_size = batch_size
+        self.indexes = [0]*batch_size
     def scale(self, x):
         # These parameters have been precalculated on the training set
         self.maximum = torch.tensor([9.29983400e+20, 3.95554500e+04, 2.87982800e+04, 4.26110400e+01, 1.83180800e+21, 6.19892000e+20, 4.79527254e+03, 6.71215625e+19], device=self.device)
@@ -47,16 +48,13 @@ class FusionDataset(IterableDataset):
             length = torch.randint(low=2, high=trajectory.size(0)//self.omega+1, size=(1,)).item()*self.omega
             start_idx = torch.randint(0, trajectory.size(0)-length+1, (1,)).item()
             trajectory = trajectory[start_idx:start_idx+length]
-            return list(torch.split(trajectory, self.omega))
-        else:
-            # So that we can connect the generated trajectory to the correct PDE variables for evaluation
-            print(file)
-            return list(torch.split(trajectory, self.omega))[:-1]
+        return trajectory
     def fill_trajectories(self):
         # Mask for where training should inject true starting point
         self.mask = [True]*len(self.trajectories)
         # Loop if self.trajectories contains a trajectory where tplus1 is unavailable
-        empty_indices = [index for (index, trajectory) in enumerate(self.trajectories) if len(trajectory)<=1]
+        traj_len = lambda i: len(self.trajectories[i][self.indexes[i]*self.omega:])
+        empty_indices = [index for index in range(len(self.trajectories)) if traj_len(index)<=(self.omega+1)]
         while empty_indices:
             # If we can load a new trajectory
             if len(self.filepaths)<=0:
@@ -65,13 +63,16 @@ class FusionDataset(IterableDataset):
             idx = empty_indices.pop()
             self.trajectories[idx] = self.get_trajectory()
             self.mask[idx] = False
+            # Reset index for this trajectory
+            self.indexes[idx] = 0
         return True
     def __iter__(self):
         while self.fill_trajectories():
             for i in range(self.batch_size):
                 # Get (unbatched) x_t and x_tplus1 (without force) and remove the former
-                x_t = self.trajectories[i].pop(0)
-                x_tplus1 = self.trajectories[i][0]
+                x_t = self.trajectories[i][:(self.indexes[i]+1)*self.omega]
+                x_tplus1 = self.trajectories[i][(self.indexes[i]+1)*self.omega:(self.indexes[i]+1)*self.omega+1]
+                self.indexes[i] += 1
                 yield x_t, x_tplus1[...,:-2]
         self.filepaths = self.get_filepaths()
 
