@@ -92,7 +92,7 @@ def plot_1d_statistic_over_time(data, statistic_idx, title):
     plt.show()
     return fig
 
-def generate(true_trajectory, forward_t, prior, decoder):
+def generate(true_trajectory, forward_t, decoder):
     """
     Generate a trajectory using the starting point and forcing variables provided.
     Args:
