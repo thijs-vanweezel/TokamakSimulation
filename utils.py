@@ -103,6 +103,8 @@ def generate(true_trajectory, forward_t, prior, decoder):
     Args:
         true_trajectory: list of tensors of shape [omega, 500, 8]
     """
+    # Save z's that produced during generation
+    zs = []
     # Generate trajectory by iteration
     gen_trajectory = [true_trajectory[0][...,:-2]]
     for i in range(len(true_trajectory)):
@@ -116,8 +118,9 @@ def generate(true_trajectory, forward_t, prior, decoder):
         z, *_ = prior(h_t)
         x_tplus1_hat = decoder(z, h_t)[0]
         # Save
+        zs.append(z)
         gen_trajectory.append(x_tplus1_hat)
-    return gen_trajectory
+    return zs, gen_trajectory
 
 def plot_loss(filepath):
     """
