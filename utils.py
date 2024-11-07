@@ -46,7 +46,7 @@ class FusionDataset(IterableDataset):
             length = torch.randint(low=2, high=trajectory.size(0)//self.omega+1, size=(1,)).item()*self.omega
             start_idx = torch.randint(0, trajectory.size(0)-length+1, (1,)).item()
             trajectory = trajectory[start_idx:start_idx+length]
-        return list(torch.split(trajectory, self.omega))
+        return list(torch.split(trajectory, self.omega))[:-(not pushforward) or None]
     def fill_trajectories(self):
         # Mask for where training should inject true starting point
         self.mask = [True]*len(self.trajectories)
