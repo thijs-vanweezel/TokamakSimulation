@@ -9,12 +9,6 @@ def log_normal_diag(x, mu, log_var):
     log_p = -0.5 * keras.ops.log(2. * math.pi) - 0.5 * log_var - 0.5 * keras.ops.exp(-log_var) * (x - mu)**2.
     return log_p
 
-def log_bernoulli(x, p):
-    eps = 1.e-5
-    pp = keras.ops.clip(p, eps, 1. - eps)
-    log_p = x * keras.ops.log(pp) + (1. - x) * keras.ops.log(1. - pp)
-    return keras.ops.mean(log_p, [1,2,3]) # mean reduction
-
 # The only function of the code that requires backend-specific ops 
 def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, opt):
     # Move to gpu
@@ -30,8 +24,11 @@ def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decod
         log_normal_diag(z, mu, logvar) - log_normal_diag(z, *mu_logvar), 
         axis=[1,2,3]  # mean reduction
     )
-    rec_ll = log_bernoulli(x_tplus1, x_tplus1_hat)
-    loss = keras.ops.mean(-rec_ll + kl_nll) # mean reduction
+    rec_nl = keras.ops.mean( # MSE == \mathcal{N}(\eps|0,1)
+        keras.ops.square(x_tplus1 - x_tplus1_hat),
+        axis=[1,2,3]  # mean reduction
+    )
+    loss = keras.ops.mean(rec_nl + kl_nll) # mean reduction
 
     # Prepare backward pass
     forward_t.zero_grad()
@@ -49,7 +46,7 @@ def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decod
         opt.apply_gradients(zip(gradients, trainable_weights))
 
     # Return loss interpretably
-    return x_tplus1_hat, keras.ops.mean(kl_nll).item(), keras.ops.mean(-rec_ll).item()
+    return x_tplus1_hat, keras.ops.mean(kl_nll).item(), keras.ops.mean(rec_nl).item()
 
 def val_step(x_t, x_tplus1, forward_t, prior, decoder):
     # Move to gpu
@@ -60,7 +57,8 @@ def val_step(x_t, x_tplus1, forward_t, prior, decoder):
     z, *_  = prior(h_t)
     x_tplus1_hat = decoder(z, h_t)
     # Return reconstruction loss
-    return keras.ops.mean(-log_bernoulli(x_tplus1, x_tplus1_hat)).item()
+    rec_nl = keras.ops.mean(keras.ops.square(x_tplus1 - x_tplus1_hat)) # mean (squared) reduction
+    return rec_nl.item()
 
 def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, decoder, optimizer, save_dir, max_epochs, max_patience=5):
     # Loop over epochs
