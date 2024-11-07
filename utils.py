@@ -30,9 +30,9 @@ class FusionDataset(IterableDataset):
         self.sigma = torch.tensor([[6.07735822e+19, 9.96008140e+03, 5.33818657e+03, 1.03287412e+01, 1.43263560e+19, 1.05223976e+19, 1.15240628e+03, 1.72603208e+19]], device=self.device)
         self.mu = torch.tensor([[7.07982534e+19, 1.70274903e+04, 8.30559879e+03, 1.24850983e+01, 3.18866547e+18, 3.36626442e+18, 5.39373277e+02, 8.06264466e+18]], device=self.device)
         # Scale
-        return (x - self.mu) / self.sigma
+        return (x - self.minimum) / (self.maximum - self.minimum)
     def unscale(self, x):
-        return x * self.sigma + self.mu
+        return x * (self.maximum - self.minimum) + self.minimum
     def get_trajectory(self):
         # Load random trajectory and forcing variables
         idx = torch.randint(0, len(self.filepaths), (1,)).item()
