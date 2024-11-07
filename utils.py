@@ -142,8 +142,8 @@ def plot_loss(filepath):
         label="Küllback-Leibler divergence",
         linestyle="--"
     );
-    fig.legend();
-    ax2 = ax1.twinx();
+    ax2 = ax1.twinx()
+    ax2.set_ylabel("Reconstruction loss")
     ax2.set_ylabel("Reconstruction loss");
     ax2.plot(
         train_loss_history["rec_loss"], 
@@ -152,9 +152,10 @@ def plot_loss(filepath):
         linestyle=":"
     );
     ax2.plot(
-        train_loss_history["rec_loss"], 
-        color="black", 
+        train_loss_history["val_rec_loss"], 
+        color="black",
         label="Validation reconstruction loss",
         linestyle="-."
-    );
+    )
     fig.legend();
+    return fig
