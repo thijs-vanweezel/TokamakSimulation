@@ -118,7 +118,7 @@ def generate(true_trajectory, forward_t, prior, decoder):
         z, *_ = prior(h_t)
         x_tplus1_hat = decoder(z, h_t)[0]
         # Save
-        z_traj.append(z)
+        z_traj.append(z[0])
         gen_trajectory.append(x_tplus1_hat)
     return z_traj, gen_trajectory
 
