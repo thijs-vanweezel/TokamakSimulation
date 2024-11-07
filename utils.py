@@ -21,17 +21,18 @@ class FusionDataset(IterableDataset):
         self.filepaths = self.get_filepaths()
         self.device = device or "cuda" if torch.cuda.is_available() else "cpu"
         self.omega = omega
-        self.std = self.mean = None
         self.trajectories = [[] for _ in range(batch_size)]
         self.batch_size = batch_size
     def scale(self, x):
-        # Calculate parameters once
-        if self.std is None:
-            self.std, self.mean = torch.std_mean(x, dim=[0,1])
+        # These parameters have been precalculated on the training set
+        self.maximum = torch.tensor([9.29983400e+20, 3.95554500e+04, 2.87982800e+04, 4.26110400e+01, 1.83180800e+21, 6.19892000e+20, 4.79527254e+03, 6.71215625e+19], device=self.device)
+        self.minimum = torch.tensor([ 4.5370e+18, -5.7290e+02, -7.3316e+00,  1.4339e-01,  1.8328e+15, 2.9860e+14,  0.0000e+00,  0.0000e+00], device=self.device)
+        self.sigma = torch.tensor([[6.07735822e+19, 9.96008140e+03, 5.33818657e+03, 1.03287412e+01, 1.43263560e+19, 1.05223976e+19, 1.15240628e+03, 1.72603208e+19]], device=self.device)
+        self.mu = torch.tensor([[7.07982534e+19, 1.70274903e+04, 8.30559879e+03, 1.24850983e+01, 3.18866547e+18, 3.36626442e+18, 5.39373277e+02, 8.06264466e+18]], device=self.device)
         # Scale
-        return (x - self.mean) / self.std
+        return (x - self.mu) / self.sigma
     def unscale(self, x):
-        return x * self.std + self.mean
+        return x * self.sigma + self.mu
     def get_trajectory(self):
         # Load random trajectory and forcing variables
         idx = torch.randint(0, len(self.filepaths), (1,)).item()
