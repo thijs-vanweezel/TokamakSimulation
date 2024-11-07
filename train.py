@@ -63,13 +63,12 @@ def val_step(x_t, x_tplus1, forward_t, prior, decoder):
 def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, decoder, optimizer, save_dir, max_epochs, max_patience=5):
     # Loop over epochs
     patience = 0
-    train_loss_history = {"kl_loss": [], "rec_loss": []}
-    val_loss_hist = []
+    loss_history = {"kl_loss": [], "rec_loss": [], "val_rec_loss": []}
     os.makedirs(save_dir, exist_ok=True)
     for i in tqdm(range(max_epochs)):
         # Initialize losses
-        train_loss_history["kl_loss"].append(0)
-        train_loss_history["rec_loss"].append(0)
+        loss_history["kl_loss"].append(0)
+        loss_history["rec_loss"].append(0)
         # Loop over batches
         for j, (x_t, x_tplus1) in enumerate(train_loader, 1):
             # Prepare pushforward training
@@ -82,18 +81,18 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
             # Train
             x_t_hat, kl_loss, rec_loss = train_step(x_t_hat, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, optimizer)
             # Keep track of losses
-            train_loss_history["kl_loss"][i] += kl_loss
-            train_loss_history["rec_loss"][i] += rec_loss
+            loss_history["kl_loss"][i] += kl_loss
+            loss_history["rec_loss"][i] += rec_loss
         # Normalize losses
-        train_loss_history["kl_loss"][i] /= j
-        train_loss_history["rec_loss"][i] /= j
+        loss_history["kl_loss"][i] /= j
+        loss_history["rec_loss"][i] /= j
         # Validation
         val_loss = 0
         for k, (x_t, x_tplus1) in enumerate(val_loader, 1):
             val_loss += val_step(x_t, x_tplus1, forward_t, prior, decoder)
-        val_loss_hist.append(val_loss/k)
+        loss_history["val_rec_loss"].append(val_loss/k)
         # Early stopping with patience
-        if (i>0) and ((val_loss/k)>min(val_loss_hist)):
+        if (i>0) and ((val_loss/k)>min(loss_history["val_rec_loss"])):
             patience += 1
             if patience>max_patience:
                 break
@@ -108,6 +107,4 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
             decoder.save_weights(f"{save_dir}/decoder.weights.h5")
             # Save history 
             with open(f"{save_dir}/history.json", "w") as f:
-                json.dump(train_loss_history, f)
-            with open(f"{save_dir}/val_history.json", "w") as f:
-                json.dump(val_loss_hist, f)
+                json.dump(loss_history, f)

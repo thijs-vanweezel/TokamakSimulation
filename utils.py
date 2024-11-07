@@ -118,7 +118,7 @@ def plot_loss(filepath):
     Plots the training loss with separate axes from a JSON file.
     Args:
         filepath (str): The path to the JSON file containing the training loss history, 
-        consisting of Küllback-Leibler divergence and reconstruction loss.  
+        consisting of Küllback-Leibler divergence, reconstruction loss, and validation loss.  
     """
     # Load training history
     with open(filepath, "r") as f:
@@ -141,5 +141,11 @@ def plot_loss(filepath):
         color="black", 
         label="Reconstruction loss",
         linestyle=":"
+    );
+    ax2.plot(
+        train_loss_history["rec_loss"], 
+        color="black", 
+        label="Validation reconstruction loss",
+        linestyle="-."
     );
     fig.legend();
