@@ -2,6 +2,7 @@ import os, math
 os.environ["KERAS_BACKEND"] = "torch"
 import keras, torch, json
 from tqdm.auto import tqdm
+from utils import ssim_fn
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -24,11 +25,10 @@ def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decod
         log_normal_diag(z, mu, logvar) - log_normal_diag(z, *mu_logvar), 
         axis=[1,2,3]  # mean reduction
     )
-    rec_nl = keras.ops.mean( # MSE == \mathcal{N}(\eps|0,1)
-        keras.ops.square(x_tplus1 - x_tplus1_hat),
-        axis=[1,2,3]  # mean reduction
-    )
-    loss = keras.ops.mean(rec_nl + kl_nll) # mean reduction
+    # MAE and SSIM
+    rec_loss = (1-.84)*keras.ops.mean(x_tplus1 - x_tplus1_hat, axis=[1,2,3])
+    rec_loss += .84*ssim_fn(x_tplus1, x_tplus1_hat)
+    loss = keras.ops.mean(rec_loss + kl_nll) # mean reduction
 
     # Prepare backward pass
     forward_t.zero_grad()
@@ -46,7 +46,7 @@ def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decod
         opt.apply_gradients(zip(gradients, trainable_weights))
 
     # Return loss interpretably
-    return x_tplus1_hat, keras.ops.mean(kl_nll).item(), keras.ops.mean(rec_nl).item()
+    return x_tplus1_hat, keras.ops.mean(kl_nll).item(), keras.ops.mean(rec_loss).item()
 
 def val_step(x_t, x_tplus1, forward_t, prior, decoder):
     # Move to gpu

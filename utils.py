@@ -150,3 +150,17 @@ def plot_loss(filepath):
         linestyle="-."
     );
     fig.legend();
+
+def ssim_fn(y_true, y_pred, C1=1e-6, C2=9e-6):
+    mu_x = keras.ops.average_pool(y_true, (3, 3), 1, "same")
+    mu_y = keras.ops.average_pool(y_pred, (3, 3), 1, "same")
+
+    sigma_x = keras.ops.average_pool(y_true * y_true, (3, 3), 1, "same") - mu_x * mu_x
+    sigma_y = keras.ops.average_pool(y_pred * y_pred, (3, 3), 1, "same") - mu_y * mu_y
+    sigma_xy = keras.ops.average_pool(y_true * y_pred, (3, 3), 1, "same") - mu_x * mu_y
+
+    ssim_n = (2 * mu_x * mu_y + C1) * (2 * sigma_xy + C2)
+    ssim_d = (mu_x * mu_x + mu_y * mu_y + C1) * (sigma_x + sigma_y + C2)
+
+    ssim = ssim_n / ssim_d
+    return keras.ops.mean(ssim, axis=[1,2,3])
