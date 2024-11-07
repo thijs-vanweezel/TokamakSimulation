@@ -108,8 +108,7 @@ def generate(true_trajectory, forward_t, prior, decoder):
         ], axis=-1)
         # Generate
         h_t = forward_t(keras.ops.expand_dims(x_t_hat, axis=0))
-        z, *_ = prior(h_t)
-        x_tplus1_hat = decoder(z, h_t)[0]
+        x_tplus1_hat = decoder(h_t)[0]
         # Save
         gen_trajectory.append(x_tplus1_hat)
     return gen_trajectory
@@ -126,14 +125,7 @@ def plot_loss(filepath):
         train_loss_history = json.load(f)
     fig, ax1 = plt.subplots();
     ax1.set_xlabel("Epoch");
-    ax1.set_ylabel("Küllback-Leibler divergence");
     ax1.set_title("Training Loss");
-    ax1.plot(
-        train_loss_history["kl_loss"], 
-        color="black", 
-        label="Küllback-Leibler divergence",
-        linestyle="--"
-    );
     fig.legend();
     ax2 = ax1.twinx();
     ax2.set_ylabel("Reconstruction loss");
