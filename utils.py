@@ -124,29 +124,46 @@ def plot_loss(filepath):
     # Load training history
     with open(filepath, "r") as f:
         train_loss_history = json.load(f)
-    fig, ax1 = plt.subplots();
-    ax1.set_xlabel("Epoch");
-    ax1.set_ylabel("Küllback-Leibler divergence");
-    ax1.set_title("Training Loss");
+
+    fig, ax1 = plt.subplots()
+    ax1.set_xlabel("Epoch")
+    ax1.set_ylabel("Küllback-Leibler divergence")
+    ax1.set_title("Training Loss")
     ax1.plot(
         train_loss_history["kl_loss"], 
         color="black", 
         label="Küllback-Leibler divergence",
         linestyle="--"
-    );
-    fig.legend();
-    ax2 = ax1.twinx();
-    ax2.set_ylabel("Reconstruction loss");
+    )
+
+    # First twin axis for reconstruction loss
+    ax2 = ax1.twinx()
+    ax2.set_ylabel("Reconstruction loss")
     ax2.plot(
         train_loss_history["rec_loss"], 
         color="black", 
         label="Reconstruction loss",
         linestyle=":"
-    );
+    )
     ax2.plot(
-        train_loss_history["rec_loss"], 
-        color="black", 
+        train_loss_history["val_rec_loss"], 
+        color="black",
         label="Validation reconstruction loss",
         linestyle="-."
-    );
-    fig.legend();
+    )
+
+    # Second twin axis for PDE loss
+    ax3 = ax1.twinx()
+    ax3.spines['right'].set_position(('outward', 60))  # Offset the third axis
+    ax3.set_ylabel("PDE loss")
+    ax3.plot(
+        train_loss_history["pde_loss"], 
+        color="black", 
+        label="PDE loss",
+        linestyle="-"
+    )
+
+    # Combine legends
+    fig.legend(loc="upper left", bbox_to_anchor=(0.1, 0.9))
+    plt.show()
+    return fig
