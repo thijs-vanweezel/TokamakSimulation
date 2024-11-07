@@ -8,7 +8,7 @@ def reparameterize(mu, log_var):
 
 class Forward(keras.Model):
     """
-    An eight-layer residual convolutional network with dilated convolutions. Decreases the spatial dimensions by a factor of 8.
+    An eight-layer residual convolutional network with dilated convolutions. Removes the spatial dimension.
     """
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -20,16 +20,22 @@ class Forward(keras.Model):
             keras.layers.GroupNormalization(groups=-1),
             keras.layers.Activation("silu")    
         ])
-        self.conv1x1_1 = keras.layers.Conv2D(32, (1, 1), padding="same")
-        self.block1 = block(32)
-        self.pool1 = keras.layers.MaxPooling2D((1, 2))
-        self.conv1x1_2 = keras.layers.Conv2D(64, (1, 1), padding="same")
-        self.block2 = block(64)
-        self.pool2 = keras.layers.MaxPooling2D((1, 2))
-        self.conv1x1_3 = keras.layers.Conv2D(128, (1, 1), padding="same")
-        self.block3 = block(128)
-        self.pool3 = keras.layers.MaxPooling2D((1, 2))
-        self.block4 = block(256)
+
+        self.conv1x1_1 = keras.layers.Conv2D(16, (1, 1), padding="same")
+        self.block1 = block(16)
+        self.pool1 = keras.layers.MaxPooling2D((3, 3))
+        self.conv1x1_2 = keras.layers.Conv2D(32, (1, 1), padding="same")
+        self.block2 = block(32)
+        self.pool2 = keras.layers.MaxPooling2D((3, 3))
+        self.conv1x1_3 = keras.layers.Conv2D(64, (1, 1), padding="same")
+
+        self.block_q = block(64)
+        self.block_v = block(64)
+        self.block_k = block(64)
+        self.attention = keras.layers.Attention()
+        self.norm = keras.layers.LayerNormalization()
+        self.globalpool = keras.layers.GlobalMaxPooling2D()
+        self.dense = keras.layers.Dense(512)
 
     def call(self, x_t):
         h_ = self.conv1x1_1(x_t)
@@ -43,11 +49,19 @@ class Forward(keras.Model):
         h = self.pool2(h)
 
         h_ = self.conv1x1_3(h)
-        h = self.block3(h)
+        q = self.block_q(h)
+        b,he,w,c = keras.ops.shape(q)
+        q = keras.ops.reshape(q, (b,he*w,c))
+        v = self.block_v(h)
+        v = keras.ops.reshape(v, (b,he*w,c))
+        k = self.block_k(h)
+        k = keras.ops.reshape(k, (b,he*w,c))
+        h = self.attention([q, v, k])
+        h = keras.ops.reshape(h, (b,he,w,c))
         h = keras.layers.add([h, h_])
-        h = self.pool3(h)
-
-        h_t = self.block4(h)
+        h = self.norm(h)
+        h = self.globalpool(h)
+        h_t = self.dense(h)
         return h_t
 
 class Prior(keras.Model):
@@ -57,9 +71,9 @@ class Prior(keras.Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.net = keras.Sequential([
-            keras.layers.Conv2D(512, (3, 3), padding="same"),
+            keras.layers.Dense(512),
             keras.layers.Activation("silu"),
-            keras.layers.Conv2DTranspose(512, (3, 3), padding="same"),
+            keras.layers.Dense(1000)
         ])
 
     def call(self, h_t):
@@ -72,9 +86,9 @@ class Posterior(keras.Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.net = keras.Sequential([
-            keras.layers.Conv2D(512, (3, 3), padding="same"),
+            keras.layers.Dense(512),
             keras.layers.Activation("silu"),
-            keras.layers.Conv2DTranspose(512, (3, 3), padding="same"),
+            keras.layers.Dense(1024)
         ])
 
     def call(self, h_t, x_tplus1):
@@ -88,31 +102,33 @@ class Posterior(keras.Model):
 class Decoder(keras.Model):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        block = lambda filters, activation="silu", strides=None: keras.Sequential([
+        block = lambda filters, activation="silu": keras.Sequential([
             keras.layers.Dropout(.1),
-            keras.layers.Conv2DTranspose(filters, (3, 3), padding="same"),
+            keras.layers.Conv1DTranspose(filters, 3, padding="same"),
             keras.layers.Activation("silu"),
-            keras.layers.Conv2DTranspose(filters, (3, 3), strides=strides if strides else (1, 2), padding="same"),
+            keras.layers.Conv1DTranspose(filters, 3, padding="same"),
             keras.layers.GroupNormalization(groups=-1),
             keras.layers.Activation(activation) 
         ])
-        self.conv1x1_1 = keras.layers.Conv2DTranspose(256, (1, 1), strides=(1, 2), padding="same")
-        self.block1 = block(256)
-        self.padding = keras.layers.ZeroPadding2D(((0, 0), (1, 0)))
-        self.conv1x1_2 = keras.layers.Conv2DTranspose(128, (1, 1), strides=(1, 2), padding="same")
+        self.dense = keras.layers.Dense(500)
+        self.reshape = keras.layers.Reshape((500, 1))
+        self.conv1x1_1 = keras.layers.Conv1D(64, 1, padding="same")
+        self.block1 = block(64)
+        self.conv1x1_2 = keras.layers.Conv1D(128, 1, padding="same")
         self.block2 = block(128)
-        self.conv1x1_3 = keras.layers.Conv2DTranspose(64, (1, 1), strides=(1, 2), padding="same")
+        self.conv1x1_3 = keras.layers.Conv1D(64, 1, padding="same")
         self.block3 = block(64)
-        self.block4 = block(6, "linear", (1, 1))
+        self.block4 = block(6, "linear")
 
     def call(self, z, h_t):
         x = keras.layers.concatenate([z, h_t])
+        x = self.dense(x)
+        x = self.reshape(x)
 
         x_ = self.conv1x1_1(x)
         x = self.block1(x)
         x = keras.layers.add([x, x_]) # residual connection
 
-        x = self.padding(x) # Required for exact shape matching
         x_ = self.conv1x1_2(x)
         x = self.block2(x)
         x = keras.layers.add([x, x_])
