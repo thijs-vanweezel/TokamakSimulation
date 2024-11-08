@@ -15,7 +15,7 @@ class FusionDataset(IterableDataset):
         `omega` (int): Size of trajectory chunks.
         `batch_size` (int): As used in the `DataLoader` wrapper. Defaults to 1.
     """
-    def __init__(self, data_dir:str, batch_size:int=1, device:str=None, omega:int=20):
+    def __init__(self, data_dir:str, batch_size:int=1, device:str=None, omega:int=10):
         super().__init__()
         self.get_filepaths = lambda: [os.path.join(root, file) for root, _, files in os.walk(data_dir) for file in files if file.endswith(".npz")]
         self.filepaths = self.get_filepaths()
@@ -54,7 +54,7 @@ class FusionDataset(IterableDataset):
         self.mask = [True]*len(self.trajectories)
         # Loop if self.trajectories contains a trajectory where tplus1 is unavailable
         traj_len = lambda i: len(self.trajectories[i][self.indexes[i]*self.omega:])
-        empty_indices = [index for index in range(len(self.trajectories)) if traj_len(index)<=(self.omega+1)]
+        empty_indices = [index for index in range(len(self.trajectories)) if traj_len(index)<=self.omega*2]
         while empty_indices:
             # If we can load a new trajectory
             if len(self.filepaths)<=0:
@@ -68,16 +68,18 @@ class FusionDataset(IterableDataset):
         return True
     def __iter__(self):
         while self.fill_trajectories():
+            length = (min(self.indexes)+1)*self.omega
             for i in range(self.batch_size):
-                # Get (unbatched) x_t and x_tplus1 (without force) and remove the former
-                x_t = self.trajectories[i][:(self.indexes[i]+1)*self.omega]
-                x_tplus1 = self.trajectories[i][(self.indexes[i]+1)*self.omega:(self.indexes[i]+1)*self.omega+1]
+                # Get (unbatched) x_:t and x_tplus1 (without force) and remove the former
+                end_t = (self.indexes[i]+1)*self.omega
+                x_t = self.trajectories[i][end_t-length:end_t]
+                x_tplus1 = self.trajectories[i][end_t:end_t+self.omega]
                 self.indexes[i] += 1
                 yield x_t, x_tplus1[...,:-2]
         self.filepaths = self.get_filepaths()
 
 # Really a very simple utility function
-dataloader = lambda data_dir, batch_size=16, device=None, omega=20: \
+dataloader = lambda data_dir, batch_size=16, device=None, omega=10: \
     DataLoader(FusionDataset(data_dir, batch_size, device, omega), batch_size)
 
 def plot_1d_statistic_over_time(data, statistic_idx, title):
