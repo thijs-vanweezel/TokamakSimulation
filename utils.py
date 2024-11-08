@@ -37,7 +37,8 @@ class FusionDataset(IterableDataset):
         # Load random trajectory and forcing variables
         idx = torch.randint(0, len(self.filepaths), (1,)).item()
         file = self.filepaths.pop(idx)
-        x, f = np.load(file).values()
+        file = np.load(file)
+        x, f = file["output"], file["forcing"]
         x, f = torch.tensor(x, device=self.device), torch.tensor(f, device=self.device)
         trajectory = torch.concat([x,f], dim=-1)
         # Scale
