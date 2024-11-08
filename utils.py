@@ -100,30 +100,27 @@ def plot_1d_statistic_over_time(data, statistic_idx, title):
     plt.show()
     return fig
 
-def generate(true_trajectory, forward_t, prior, decoder):
+def generate(true_trajectory, forward_t, prior, decoder, omega=10):
     """
     Generate a trajectory using the starting point and forcing variables provided.
     Args:
-        true_trajectory: list of tensors of shape [omega, 500, 8]
+        true_trajectory: tensor of shape [time, 500, 8]
     """
-    # Save z's that produced during generation
-    z_traj = []
     # Generate trajectory by iteration
-    gen_trajectory = [true_trajectory[0][...,:-2]]
-    for i in range(len(true_trajectory)):
+    gen_trajectory = true_trajectory[:omega,...,:-2]
+    for i in range(len(true_trajectory)//omega):
         # Concatenate forcing variables
         x_t_hat = keras.ops.concatenate([
-            gen_trajectory[i], 
-            true_trajectory[i][...,-2:]
+            gen_trajectory, 
+            true_trajectory[:len(gen_trajectory),...,-2:]
         ], axis=-1)
         # Generate
         h_t = forward_t(keras.ops.expand_dims(x_t_hat, axis=0))
         z, *_ = prior(h_t)
         x_tplus1_hat = decoder(z, h_t)[0]
         # Save
-        z_traj.append(z[0])
-        gen_trajectory.append(x_tplus1_hat)
-    return z_traj, gen_trajectory
+        gen_trajectory = keras.ops.concatenate([gen_trajectory, x_tplus1_hat], axis=0)
+    return gen_trajectory
 
 def plot_loss(filepath):
     """
