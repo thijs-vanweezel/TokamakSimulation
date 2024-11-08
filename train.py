@@ -40,7 +40,7 @@ def train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decod
         opt.apply_gradients(zip(gradients, trainable_weights))
 
     # Return loss interpretably
-    return x_tplus1_hat, keras.ops.mean(kl_nll).item(), keras.ops.mean(rec_nl).item()
+    return keras.ops.mean(kl_nll).item(), keras.ops.mean(rec_nl).item()
 
 def val_step(x_t, x_tplus1, forward_t, prior, decoder):
     # Move to gpu
@@ -65,15 +65,8 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
         loss_history["rec_loss"].append(0)
         # Loop over batches
         for j, (x_t, x_tplus1) in enumerate(train_loader, 1):
-            # Prepare pushforward training
-            if j==1:
-                x_t_hat = x_t
-            else:
-                mask = keras.ops.reshape(train_loader.dataset.mask, (-1,1,1,1))
-                x_t_hat = keras.ops.where(mask, x_t_hat.detach(), x_t[...,:-2]) # detach used in favor of retain_graph
-                x_t_hat = keras.ops.concatenate([x_t_hat, x_t[...,-2:]], axis=-1)
             # Train
-            x_t_hat, kl_loss, rec_loss = train_step(x_t_hat, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, optimizer)
+            kl_loss, rec_loss = train_step(x_t, x_tplus1, forward_t, forward_tplus1, prior, posterior, decoder, optimizer)
             # Keep track of losses
             loss_history["kl_loss"][i] += kl_loss
             loss_history["rec_loss"][i] += rec_loss
