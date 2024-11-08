@@ -108,7 +108,7 @@ def generate(true_trajectory, forward_t, prior, decoder, omega=10):
     """
     # Generate trajectory by iteration
     gen_trajectory = true_trajectory[:omega,...,:-2]
-    for i in range(len(true_trajectory)//omega):
+    for _ in range(len(true_trajectory)//omega):
         # Concatenate forcing variables
         x_t_hat = keras.ops.concatenate([
             gen_trajectory, 
