@@ -124,7 +124,6 @@ class Decoder(keras.Model):
         x = keras.ops.expand_dims(x, axis=-1)
 
         x = self.pad1(x)
-        print(x.shape)
         x_ = self.conv1x1_1(x)
         x = self.block1(x)
         x = keras.layers.add([x, x_]) # residual connection

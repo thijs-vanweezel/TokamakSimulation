@@ -65,7 +65,6 @@ def run(train_loader, val_loader, forward_t, forward_tplus1, prior, posterior, d
         loss_history["rec_loss"].append(0)
         # Loop over batches
         for j, (x_t, x_tplus1) in enumerate(train_loader, 1):
-            print("BATCH"   , j)
             # Prepare pushforward training
             if j==1:
                 x_t_hat = x_t
