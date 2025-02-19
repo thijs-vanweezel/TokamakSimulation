@@ -1,0 +1,159 @@
+---
+- name: Setup thesis environment on worker
+  hosts: worker
+  become: yes
+  gather_facts: yes
+  vars:
+    # Environment configs
+    project: "TokamakSimulation"
+
+    # Host VM configs
+    host_port: 8901
+    volume_path: "/srv/samba/fileshare/{{ project }}"
+    
+    # GitHub specific vars
+    github_token: "{{ lookup('file', '/mnt/c/Users/ljpsm/OneDrive/programmeren/configs/github/token-tue.txt') }}"
+    github_repo_base_url: "https://{{ github_token }}@github.com/thijs-vanweezel"
+    github_repo_name: "TokamakSimulation"
+
+    # Container user customization (to prevent permission issues)
+    NB_USER: "ubuntu"
+    NB_UID: "1000"
+    NB_GID: "1000"
+
+    # ML flow configs
+    ml_flow_host_volume_path: "/srv/samba/fileshare/mlflow"
+
+  tasks:
+    
+    - name: Ensure persistent directories exist
+      vars:
+        directories:
+          - "{{volume_path}}"
+          - "{{volume_path}}/code"
+          - "{{volume_path}}/data"
+          - "{{volume_path}}/logs"
+          - "{{volume_path}}/results"
+          # make sure conda subfolders exist to store packages and envs in
+          - "{{volume_path}}/conda/pkgs"
+          - "{{volume_path}}/conda/envs"
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ NB_USER }}"
+        group: "{{ NB_USER }}"
+        mode: "0755"
+        recurse: yes
+      loop: "{{ directories }}"
+
+    - name: Check if repository already exists
+      stat:
+        path: "{{ volume_path }}/code/{{ github_repo_name }}/.git"
+      register: repo_stat
+
+    - name: Clone GitHub repository into code directory if repo does not exist
+      git:
+        repo: "{{ github_repo_base_url }}/{{ github_repo_name }}"
+        dest: "{{volume_path}}/code/{{ github_repo_name }}"
+        version: "base"
+      become_user: ubuntu
+      when: not repo_stat.stat.exists
+
+    - name: Config GitHub user email (if repo does not exist)
+      git_config:
+        name: user.email
+        repo: "{{volume_path}}/code/{{ github_repo_name }}"
+        scope: local
+        value: "l.j.p.smolders@student.tue.nl"
+      when: not repo_stat.stat.exists
+
+    - name: Config GitHub user name (if repo does not exist)
+      git_config:
+        name: user.name
+        repo: "{{volume_path}}/code/{{ github_repo_name }}"
+        scope: local
+        value: "RobertSmoldersTUe"
+      when: not repo_stat.stat.exists
+
+    - name: Run custom build Jupyter PyTorch notebook container
+      docker_container:
+        name: "{{ project }}"
+        image: "quay.io/jupyter/pytorch-notebook:cuda12-python-3.11"
+        state: started
+        detach: true
+        restart_policy: always
+
+        published_ports:
+          - "{{ host_port }}:8888"
+
+        # GPU access via device_requests (instead of gpus: all)
+        # For ansible docs see: https://docs.ansible.com/ansible/latest/collections/community/docker/docker_container_module.html#parameter-device_requests
+        # For more details on possible values for nvidia, see: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/docker-specialized.html
+        device_requests:
+          - driver: nvidia
+            count: -1  # -1 = request all available GPUs
+            capabilities: ["compute", "utility"]
+
+        user: "root" # Setting this value is required when providing custom NB_USER
+        working_dir: "/home/{{ NB_USER }}"
+
+        env:
+          NB_USER: "{{ NB_USER }}"
+          NB_UID: "{{ NB_UID }}"
+          NB_GID: "{{ NB_GID }}"
+          RESTARTABLE: "yes"
+          GRANT_SUDO: "yes"
+          CHOWN_HOME: "yes"
+          CHOWN_HOME_OPTS: "-R"
+
+          # Custom env vars (non jupyter docker stack related)
+          MINARI_DATASETS_PATH: "/home/{{ NB_USER }}/data/minari"
+
+        volumes:
+          # Persist project progress
+          - "{{volume_path}}:/home/{{ NB_USER }}"
+          - "{{volume_path}}/code:/home/{{ NB_USER }}/code"
+          - "{{volume_path}}/data:/home/{{ NB_USER }}/data"
+          - "{{volume_path}}/logs:/home/{{ NB_USER }}/logs"
+          - "{{volume_path}}/logs:/home/{{ NB_USER }}/results"
+          # Persist python package installations by mounting /opt/conda
+          - "{{ volume_path }}/conda/pkgs:/opt/conda/pkgs"
+          - "{{ volume_path }}/conda/envs:/opt/conda/envs"
+          # Persist data for mlflow
+          - "{{ ml_flow_host_volume_path }}:/mlflow"
+
+        # Setup notebook with custom root directory and expose without token
+        command: >
+          start-notebook.sh
+          --ServerApp.root_dir=/home/{{ NB_USER }}
+          --IdentityProvider.token=''
+
+    # Make sure ubuntu user in is PATH
+    - name: Copy .bashrc into the container
+      community.docker.docker_container_copy_into:
+        container: "{{ project }}"
+        path: "{{volume_path}}/code/{{ github_repo_name }}/ansible/.bashrc"
+        container_path: "/home/{{ NB_USER }}/.bashrc"
+        owner_id: "{{NB_UID}}"
+        group_id: "{{NB_GID}}"
+        mode: 0755
+
+    # Fix permissions for /opt/conda directory
+    - name: Fix permissions for /opt/conda
+      become: yes
+      file:
+        path: /opt/conda
+        owner: "{{ NB_UID }}"
+        group: "{{ NB_GID }}"
+        mode: 0755
+        recurse: yes
+
+    # Set terminal theme
+    - name: Copy oh-my-posh theme into the container
+      community.docker.docker_container_copy_into:
+        container: "{{ project }}"
+        path: "{{volume_path}}/code/{{ github_repo_name }}/oh-my-posh/thecyberden.omp.json"
+        container_path: "/home/{{ NB_USER }}/thecyberden.omp.json"
+        owner_id: "{{NB_UID}}"
+        group_id: "{{NB_GID}}"
+        mode: 0755
